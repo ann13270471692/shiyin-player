@@ -171,7 +171,7 @@ final class SyncDownloader: ObservableObject {
         let name = f.name
         let size = f.size
         // 电脑上文件已更新：旧断点内容不同，必须整份重下
-        if await MainActor.run { self.staleNames.contains(name) } {
+        if await MainActor.run(body: { self.staleNames.contains(name) }) {
             try? fm.removeItem(at: tmp)
         }
 

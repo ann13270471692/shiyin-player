@@ -136,14 +136,25 @@ struct LyricsView: View {
         updateIndex(at: engine.currentTime)
     }
 
+    /// 制作信息 / 版权水印 / 空行：这些不是唱出来的词，不参与高亮
+    static func nonVocal(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { return true }
+        let pat = "作词|作曲|编曲|制作人|出品|发行|录音|混音|母带|和声|监制|统筹|总监|版权|厂牌|经纪|宣传|文案|"
+            + "封面|设计|摄影|吉他|贝斯|鼓手|弦乐|提琴|铜管|钢琴|合成|Program|Engineer|Studio|Label|Recorded|"
+            + "Mixed|Master|Written|Arrang|未经许可|翻唱|禁止|ISRC|OPI|PBM|SPD|OP\\s*[:：]"
+        if t.range(of: pat, options: .regularExpression) != nil { return true }
+        // "XX ：YY" 这种标签行（如 "音乐项目总监：代诗琪"）
+        return t.range(of: "^\\S{1,8}\\s*[:：]\\s*\\S", options: .regularExpression) != nil
+    }
+
     private func updateIndex(at t: Double) {
         guard !lines.isEmpty else { return }
         let pos = engine.lyricPosition
         var idx = -1
         for (i, line) in lines.enumerated() {
             if line.time > pos { break }
-            // 空行只是间奏占位，不高亮：保持上一句，避免"歌词在跳但没人在唱"
-            if !line.text.trimmingCharacters(in: .whitespaces).isEmpty { idx = i }
+            if !Self.nonVocal(line.text) { idx = i }
         }
         if idx != currentIdx { currentIdx = idx }
     }

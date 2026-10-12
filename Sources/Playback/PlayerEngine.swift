@@ -25,8 +25,9 @@ final class PlayerEngine: ObservableObject {
     }
 
     func refreshOutputLatency() {
-        let route = AVAudioSession.sharedInstance().currentRoute
-        let l = route.outputLatency
+        // outputLatency 挂在 AVAudioSession 上（不是 currentRoute）：
+        // 声音从 App 送出到真正听到的延迟，蓝牙耳机可达 0.15–0.3s。
+        let l = Double(AVAudioSession.sharedInstance().outputLatency)
         guard l.isFinite, l >= 0, l < 2 else { return }
         if abs(l - outputLatency) > 0.005 { outputLatency = l }
     }
