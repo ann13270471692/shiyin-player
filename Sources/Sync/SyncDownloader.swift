@@ -83,6 +83,9 @@ final class SyncDownloader: ObservableObject {
     @Published private(set) var localNames: Set<String> = []
     /// 电脑上已更新（mtime 不一致）的本地文件，需要重新拉取
     @Published private(set) var staleNames: Set<String> = []
+    /// 每个文件上次下载时对应的电脑 mtime，用来判断"电脑上改过没有"
+    @Published private(set) var knownMtimes: [String: Int] =
+        (UserDefaults.standard.dictionary(forKey: "remoteMtimes") as? [String: Int]) ?? [:]
     @Published private(set) var state: DownloadState = .idle
     @Published private(set) var activeFile: String?
     @Published private var cancelRequested = false
@@ -92,6 +95,7 @@ final class SyncDownloader: ObservableObject {
     func rescanLocal() {
         let dir = LibraryStore.musicDirectory()
         localNames = Set((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
+        markStale(remoteFiles)
     }
 
     func cancel() {
@@ -119,29 +123,46 @@ final class SyncDownloader: ObservableObject {
         markStale(m.files)
     }
 
-    private func markStale(_ files: [RemoteFile]) {
+    func markStale(_ files: [RemoteFile]) {
         let dir = LibraryStore.musicDirectory()
         var s: Set<String> = []
         for f in files where localNames.contains(f.name) {
             let path = dir.appendingPathComponent(f.name).path
             let attrs = try? FileManager.default.attributesOfItem(atPath: path)
-            let m = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970
-            if m == nil || abs(m! - Double(f.mtime)) > 2 {
+            let size = (attrs?[.size] as? Int) ?? -1
+            // 大小不同：一定是旧文件
+            if size != f.size {
                 s.insert(f.name)
+                continue
             }
+            // 记住过这台电脑上的 mtime：直接比它，这才是"电脑上改过没有"
+            if let known = knownMtimes[f.name] {
+                if known != f.mtime { s.insert(f.name) }
+                continue
+            }
+            // 从没记过：本地 mtime 是下载时间，跟电脑上的原始 mtime 必然不同，
+            // 只能先粗判一次（会全部标记一轮），重新下载后就按记下的 mtime 精确判断
+            let m = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            if abs(m - Double(f.mtime)) > 2 { s.insert(f.name) }
         }
         staleNames = s
+    }
+
+    private func recordMtime(_ name: String, _ mtime: Int) {
+        knownMtimes[name] = mtime
+        UserDefaults.standard.set(knownMtimes, forKey: "remoteMtimes")
     }
 
     func download(_ files: [RemoteFile], from server: SyncServer) async {
         state = .running
         cancelRequested = false
-        for f in files where !localNames.contains(f.name) || staleNames.contains(f.name) {
+        for f in files {
             if cancelRequested { break }
             await downloadOne(f, server: server)
         }
         activeFile = nil
         state = cancelRequested ? .cancelled : .done
+        markStale(remoteFiles)
     }
 
     nonisolated private func downloadOne(_ f: RemoteFile, server: SyncServer) async {
@@ -191,6 +212,7 @@ final class SyncDownloader: ObservableObject {
                 self.progress[name] = 1
                 self.speedText[name] = nil
                 self.localNames.insert(name)
+                self.recordMtime(name, f.mtime)
             }
             return true
         }
@@ -259,6 +281,7 @@ final class SyncDownloader: ObservableObject {
                 self.progress[name] = 1
                 self.speedText[name] = nil
                 self.localNames.insert(name)
+                self.recordMtime(name, f.mtime)
             }
             return true
         }

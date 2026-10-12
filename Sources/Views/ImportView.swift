@@ -5,6 +5,7 @@ struct ImportView: View {
     @StateObject private var downloader = SyncDownloader()
     @EnvironmentObject var library: LibraryStore
     @State private var selected: Set<String> = []
+    @State private var hint: String?
     @State private var lastServer: SyncServer?
 
     var body: some View {
@@ -49,22 +50,25 @@ struct ImportView: View {
                 if !downloader.remoteFiles.isEmpty {
                     Section {
                         HStack(spacing: 12) {
-                            Button("全选待更新") {
-                                downloader.rescanLocal()
-                                for f in downloader.remoteFiles
-                                where !downloader.localNames.contains(f.name)
-                                    || downloader.staleNames.contains(f.name) {
-                                    selected.insert(f.name)
-                                }
-                            }
+                            Button("全选待更新") { selectStale() }
                             Button("全选") {
                                 for f in downloader.remoteFiles { selected.insert(f.name) }
+                                hint = "已全选 \(downloader.remoteFiles.count) 个文件，点「下载所选」重新拉取"
                             }
-                            Button("清空") { selected = [] }
+                            Button("清空") {
+                                selected = []
+                                hint = nil
+                            }
                             Spacer()
                             Text("已选 \(selected.count)").font(.caption).foregroundStyle(.secondary)
                         }
                         .font(.footnote)
+
+                        if let h = hint {
+                            Text(h)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
 
                         ForEach(downloader.remoteFiles) { f in
                             row(f)
@@ -112,14 +116,13 @@ struct ImportView: View {
 
     private func row(_ f: RemoteFile) -> some View {
         let stale = downloader.staleNames.contains(f.name)
-        let already = downloader.localNames.contains(f.name) && !stale
+        let downloaded = downloader.localNames.contains(f.name)
         let on = selected.contains(f.name)
         return HStack(spacing: 10) {
-            Image(systemName: stale ? "exclamationmark.arrow.circlepath"
-                    : (already ? "checkmark.circle.fill"
-                       : (on ? "checkmark.circle.fill" : "circle")))
-                .foregroundStyle(stale ? Color.orange : (already ? Color.green : (on ? Color.orange : Color.secondary)))
-                .font(.system(size: 20))
+            // 勾选框只反映"选没选"，和下载状态分开，已下载的文件也能重新拉取
+            Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(on ? Color.orange : Color.secondary)
+                .font(.system(size: 22))
             VStack(alignment: .leading, spacing: 3) {
                 Text(f.name).font(.caption).lineLimit(1)
                 if let p = downloader.progress[f.name] {
@@ -143,6 +146,8 @@ struct ImportView: View {
             Spacer()
             if stale {
                 Text("需更新").font(.caption2).foregroundStyle(.orange)
+            } else if downloaded {
+                Text("已下载").font(.caption2).foregroundStyle(.green)
             } else {
                 Text(String(format: "%.1f MB", Double(f.size) / 1_048_576))
                     .font(.caption2).foregroundStyle(.secondary)
@@ -150,15 +155,29 @@ struct ImportView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            guard !already else { return }
             if on { selected.remove(f.name) }
             else { selected.insert(f.name) }
         }
     }
 
+    private func selectStale() {
+        downloader.rescanLocal()
+        var n = 0
+        for f in downloader.remoteFiles
+        where !downloader.localNames.contains(f.name)
+            || downloader.staleNames.contains(f.name) {
+            selected.insert(f.name)
+            n += 1
+        }
+        hint = n == 0
+            ? "没有检测到需要更新的文件。想强制刷新歌词：点「全选」再「下载所选」"
+            : "已选中 \(n) 个未下载或电脑上改过的文件"
+    }
+
     private func load(_ server: SyncServer) {
         lastServer = server
         selected = []
+        hint = nil
         Task { await downloader.fetchManifest(from: server) }
     }
 
