@@ -89,7 +89,7 @@ def main():
     if not target:
         print("artifact not found", flush=True)
         sys.exit(1)
-    blob = api(target["download_url"], token, raw=True)
+    blob = api(target["archive_download_url"], token, raw=True)
     out = r"F:\DeepSeek Workspace\时事分析\shiyin-player\build\Shiyin-unsigned.zip"
     import os
     os.makedirs(os.path.dirname(out), exist_ok=True)
