@@ -58,7 +58,21 @@ final class SyncBrowser: NSObject, ObservableObject, NetServiceBrowserDelegate, 
     // MARK: - NetServiceDelegate
 
     nonisolated func netServiceDidResolveAddress(_ sender: NetService) {
-        guard let host = sender.hostName else { return }
+        var host = sender.hostName
+        if host == nil {
+            // mDNS 主机名解析失败时退回第一个 IP 地址
+            for addr in sender.addresses ?? [] {
+                if addr.withUnsafeBytes({ $0.load(as: sa_family_t.self) }) == sa_family_t(AF_INET),
+                   let sin = addr.withUnsafeBytes({ $0.baseAddress?.assumingMemoryBound(to: sockaddr_in.self) }) {
+                    var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                    if let p = inet_ntop(AF_INET, &sin.pointee.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN)) {
+                        host = String(cString: p)
+                        break
+                    }
+                }
+            }
+        }
+        guard let host else { return }
         let server = SyncServer(id: sender.name, host: host, port: sender.port,
                                 displayName: sender.name)
         Task { @MainActor in

@@ -43,8 +43,10 @@ final class SyncDownloader: ObservableObject {
         state = .done
     }
 
-    private func downloadOne(_ f: RemoteFile, server: SyncServer) async {
-        let dir = LibraryStore.musicDirectory()
+    // 非隔离：字节流循环跑在协作线程池，不阻塞 UI；
+    // 对 @Published 的更新统一跳回 MainActor。
+    nonisolated private func downloadOne(_ f: RemoteFile, server: SyncServer) async {
+        let dir = await MainActor.run { LibraryStore.musicDirectory() }
         let dest = dir.appendingPathComponent(f.name)
         let tmp = URL(fileURLWithPath: dest.path + ".part")
         let fm = FileManager.default
@@ -57,7 +59,7 @@ final class SyncDownloader: ObservableObject {
 
         let encoded = f.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? f.name
         guard let url = URL(string: "http://\(server.host):\(server.port)/file/\(encoded)") else {
-            progress[f.name] = -1
+            await setProgress(-1, for: f.name)
             return
         }
 
@@ -68,7 +70,7 @@ final class SyncDownloader: ObservableObject {
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
             guard let http = response as? HTTPURLResponse,
                   (200...299).contains(http.statusCode) else {
-                progress[f.name] = -1
+                await setProgress(-1, for: f.name)
                 return
             }
             let resume = start > 0 && http.statusCode == 206
@@ -84,33 +86,68 @@ final class SyncDownloader: ObservableObject {
             }
 
             var received = start
-            var buffer: [UInt8] = []
-            buffer.reserveCapacity(1 << 16)
-            for try await byte in bytes {
-                buffer.append(byte)
-                if buffer.count >= 65536 {
-                    handle.write(Data(buffer))
-                    received += buffer.count
-                    buffer.removeAll(keepingCapacity: true)
-                    progress[f.name] = min(Double(received) / Double(max(f.size, 1)), 0.99)
+            var sinceReport = 0
+            for try await chunk in bytes.forChunks(of: 64 * 1024) {
+                handle.write(chunk)
+                received += chunk.count
+                sinceReport += chunk.count
+                if sinceReport >= 256 * 1024 {
+                    sinceReport = 0
+                    await setProgress(min(Double(received) / Double(max(f.size, 1)), 0.99),
+                                      for: f.name)
                 }
-            }
-            if !buffer.isEmpty {
-                handle.write(Data(buffer))
-                received += buffer.count
             }
             try? handle.close()
 
             if received >= f.size {
                 try? fm.removeItem(at: dest)
                 try fm.moveItem(at: tmp, to: dest)
-                progress[f.name] = 1.0
-                localNames.insert(f.name)
+                await MainActor.run {
+                    self.progress[f.name] = 1.0
+                    self.localNames.insert(f.name)
+                }
             } else {
-                progress[f.name] = -1
+                await setProgress(-1, for: f.name)
             }
         } catch {
-            progress[f.name] = -1
+            await setProgress(-1, for: f.name)
         }
+    }
+
+    nonisolated private func setProgress(_ v: Double, for name: String) async {
+        await MainActor.run { self.progress[name] = v }
+    }
+}
+
+// AsyncBytes 的分块读取（避免逐字节写 FileHandle 的调用开销）
+private struct ByteChunks<S: AsyncSequence>: AsyncSequence where S.Element == UInt8 {
+    typealias Element = Data
+    let base: S
+    let size: Int
+
+    struct Iterator: AsyncIteratorProtocol {
+        var base: S.Iterator
+        let size: Int
+        mutating func next() async throws -> Data? {
+            var buf = Data()
+            buf.reserveCapacity(size)
+            while buf.count < size {
+                if let b = try await base.next() {
+                    buf.append(b)
+                } else {
+                    break
+                }
+            }
+            return buf.isEmpty ? nil : buf
+        }
+    }
+    func makeAsyncIterator() -> Iterator {
+        Iterator(base: base.makeAsyncIterator(), size: size)
+    }
+}
+
+extension URLSession.AsyncBytes {
+    func forChunks(of size: Int) -> ByteChunks<URLSession.AsyncBytes> {
+        ByteChunks(base: self, size: size)
     }
 }
