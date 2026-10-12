@@ -35,7 +35,8 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
-        NSLocalNetworkUsageDescription: 拾音需要在局域网内发现你的电脑，以下载音乐文件到手机�?        NSBonjourServices:
+        NSLocalNetworkUsageDescription: 拾音需要在局域网内发现你的电脑，以下载音乐文件到手机。
+        NSBonjourServices:
           - _shiyin._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
