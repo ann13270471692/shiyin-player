@@ -151,7 +151,8 @@ final class PlayerEngine: ObservableObject {
             }
             if let saved = self.positionByPath[track.path],
                saved > 3, saved < self.duration - 5 {
-                self.player.seek(to: CMTime(seconds: saved, preferredTimescale: 600))
+                self.player.seek(to: CMTime(seconds: saved, preferredTimescale: 600),
+                                 completionHandler: { _ in })
                 self.currentTime = saved
             }
         }
