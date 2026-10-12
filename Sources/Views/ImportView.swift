@@ -47,6 +47,17 @@ struct ImportView: View {
 
                 if !downloader.remoteFiles.isEmpty {
                     Section("音乐集合（\(downloader.remoteFiles.count) 个文件）") {
+                        HStack(spacing: 16) {
+                            Button("全选未下载") {
+                                for f in downloader.remoteFiles
+                                where !downloader.localNames.contains(f.name) {
+                                    selected.insert(f.name)
+                                }
+                            }
+                            Button("清空选择") { selected = [] }
+                            Spacer()
+                        }
+                        .font(.footnote)
                         ForEach(downloader.remoteFiles) { f in
                             row(f)
                         }
