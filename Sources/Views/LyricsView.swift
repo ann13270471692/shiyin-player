@@ -111,7 +111,8 @@ struct LyricsView: View {
     }
 
     /// 制作信息 / 版权水印 / 空行：这些不是唱出来的词，不参与高亮
-    static func nonVocal(_ s: String) -> Bool {
+    /// - Parameter early: 是否是开头几行（用来识别「歌名 – 歌手」这种标题行）
+    static func nonVocal(_ s: String, early: Bool = false) -> Bool {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { return true }
         let pat = "作词|作曲|编曲|制作人|出品|发行|录音|混音|母带|和声|监制|统筹|总监|版权|厂牌|经纪|宣传|文案|"
@@ -120,6 +121,8 @@ struct LyricsView: View {
         if t.range(of: pat, options: .regularExpression) != nil { return true }
         // (间奏) (主歌) (副歌) (桥段) 这类段落标记也不是唱出来的
         if (t.hasPrefix("(") || t.hasPrefix("（")) && (t.hasSuffix(")") || t.hasSuffix("）")) { return true }
+        // 开头几行的「歌名 – 歌手」是标题行
+        if early && t.range(of: "\\s[–—-]\\s", options: .regularExpression) != nil { return true }
         // "XX ：YY" 这种标签行（如 "音乐项目总监：代诗琪"）
         return t.range(of: "^\\S{1,8}\\s*[:：]\\s*\\S", options: .regularExpression) != nil
     }
@@ -130,7 +133,7 @@ struct LyricsView: View {
         var idx = -1
         for (i, line) in lines.enumerated() {
             if line.time > pos { break }
-            if !Self.nonVocal(line.text) { idx = i }
+            if !Self.nonVocal(line.text, early: i < 3) { idx = i }
         }
         if idx != currentIdx { currentIdx = idx }
     }
