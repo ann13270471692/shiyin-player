@@ -70,6 +70,12 @@ struct ImportView: View {
                         }
 
                         if downloader.state == .running {
+                            if let a = downloader.activeFile {
+                                Text("正在下载：\(a)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                             Button("停止下载", role: .destructive) { downloader.cancel() }
                         } else {
                             Button("下载所选（\(selected.count)）") { downloadSelected() }
@@ -120,7 +126,14 @@ struct ImportView: View {
                     } else if p >= 1 {
                         Text("完成").font(.caption2).foregroundStyle(.green)
                     } else {
-                        ProgressView(value: p).progressViewStyle(.linear)
+                        HStack(spacing: 6) {
+                            ProgressView(value: p).progressViewStyle(.linear)
+                            Text(String(format: "%.0f%%", p * 100))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        if let s = downloader.speedText[f.name] {
+                            Text(s).font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
