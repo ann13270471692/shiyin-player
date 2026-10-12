@@ -11,63 +11,30 @@ struct ImportView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 操作条放在 List 外面：List 的行级手势会吞掉行内裸文字按钮的点击，
-                // 之前「全选待更新 / 全选 / 清空」点不动就是这个原因
+                // 顶部：发现的电脑（固定，不随列表滚动）
+                serverModule
+
+                // 中间：选择与下载按钮（放在 List 外面，
+                // List 的行级手势会吞掉行内裸文字按钮的点击）
                 if !downloader.remoteFiles.isEmpty {
                     actionBar
-                    Divider()
                 }
 
-                List {
-                    Section("发现的电脑") {
-                        if browser.servers.isEmpty {
-                            Text("自动搜索中… 请确认电脑上运行着「启动同步服务器.bat」，且手机与其在同一 WiFi")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(browser.servers) { server in
-                            HStack {
-                                Image(systemName: "desktopcomputer")
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(server.displayName)
-                                    Text("\(server.host):\(server.port)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Button("读取列表") { load(server) }
-                                    .buttonStyle(.bordered)
-                            }
-                        }
-                        HStack {
-                            TextField("或手动输入电脑 IP", text: $browser.manualHost)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .keyboardType(.numbersAndPunctuation)
-                            Button("连接") {
-                                let host = browser.manualHost.trimmingCharacters(in: .whitespaces)
-                                guard !host.isEmpty else { return }
-                                let s = SyncServer(id: "manual-\(host)", host: host,
-                                                   port: 8450, displayName: host)
-                                browser.addManual(s)
-                                load(s)
-                            }
-                        }
-                    }
+                Divider()
 
-                    if !downloader.remoteFiles.isEmpty {
-                        Section {
-                            ForEach(downloader.remoteFiles) { f in
-                                row(f)
-                            }
-                        } header: {
+                // 底部：文件列表（只有它是滚动视图，底部安全区留给标签栏）
+                List {
+                    Section {
+                        ForEach(downloader.remoteFiles) { f in
+                            row(f)
+                        }
+                    } header: {
+                        if !downloader.remoteFiles.isEmpty {
                             Text("音乐集合（\(downloader.remoteFiles.count) 个文件）")
                         }
-                    }
-
-                    if case .failed(let msg) = downloader.state {
-                        Section {
-                            Text(msg).font(.footnote).foregroundStyle(.red)
+                    } footer: {
+                        if downloader.remoteFiles.isEmpty {
+                            Text("连上电脑后这里会列出全部文件。")
                         }
                     }
 
@@ -79,6 +46,7 @@ struct ImportView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .contentMargins(.bottom, 18, for: .scrollContent)
             }
             .navigationTitle("导入")
             .onAppear {
@@ -89,7 +57,76 @@ struct ImportView: View {
         }
     }
 
-    // MARK: - 操作条（对齐鸿蒙版：一排胶囊按钮 + 下载按钮同处一排）
+    private var isFailed: Bool {
+        if case .failed = downloader.state { return true }
+        return false
+    }
+
+    // MARK: - 顶部：发现的电脑
+
+    private var serverModule: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("发现的电脑").font(.subheadline.weight(.semibold))
+                Spacer()
+                if let s = lastServer, !isFailed {
+                    Label("已连接 \(s.displayName)", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            }
+
+            if browser.servers.isEmpty {
+                Text("自动搜索中… 请确认电脑上运行着「启动同步服务器.bat」，且手机与其在同一 WiFi")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(browser.servers) { server in
+                HStack(spacing: 10) {
+                    Image(systemName: "desktopcomputer")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(server.displayName).font(.subheadline)
+                        Text("\(server.host):\(server.port)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("读取列表") { load(server) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                }
+            }
+
+            HStack(spacing: 10) {
+                TextField("或手动输入电脑 IP", text: $browser.manualHost)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.numbersAndPunctuation)
+                Button("连接") {
+                    let host = browser.manualHost.trimmingCharacters(in: .whitespaces)
+                    guard !host.isEmpty else { return }
+                    let s = SyncServer(id: "manual-\(host)", host: host,
+                                       port: 8450, displayName: host)
+                    browser.addManual(s)
+                    load(s)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if case .failed(let msg) = downloader.state {
+                Text(msg).font(.caption).foregroundStyle(.red)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    // MARK: - 中间：选择与下载
 
     private var actionBar: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -139,7 +176,7 @@ struct ImportView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground))
+        .background(Color(.systemBackground))
     }
 
     private func chip(_ title: String, _ action: @escaping () -> Void) -> some View {
@@ -149,7 +186,7 @@ struct ImportView: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(.systemBackground), in: Capsule())
+                .background(Color(.secondarySystemBackground), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color(.systemGray4), lineWidth: 1))
         }
         .buttonStyle(.plain)
