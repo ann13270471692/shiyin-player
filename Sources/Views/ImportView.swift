@@ -10,99 +10,74 @@ struct ImportView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("发现的电脑") {
-                    if browser.servers.isEmpty {
-                        Text("自动搜索中… 请确认电脑上运行着「启动同步服务器.bat」，且手机与其在同一 WiFi")
+            VStack(spacing: 0) {
+                // 操作条放在 List 外面：List 的行级手势会吞掉行内裸文字按钮的点击，
+                // 之前「全选待更新 / 全选 / 清空」点不动就是这个原因
+                if !downloader.remoteFiles.isEmpty {
+                    actionBar
+                    Divider()
+                }
+
+                List {
+                    Section("发现的电脑") {
+                        if browser.servers.isEmpty {
+                            Text("自动搜索中… 请确认电脑上运行着「启动同步服务器.bat」，且手机与其在同一 WiFi")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(browser.servers) { server in
+                            HStack {
+                                Image(systemName: "desktopcomputer")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(server.displayName)
+                                    Text("\(server.host):\(server.port)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("读取列表") { load(server) }
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                        HStack {
+                            TextField("或手动输入电脑 IP", text: $browser.manualHost)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.numbersAndPunctuation)
+                            Button("连接") {
+                                let host = browser.manualHost.trimmingCharacters(in: .whitespaces)
+                                guard !host.isEmpty else { return }
+                                let s = SyncServer(id: "manual-\(host)", host: host,
+                                                   port: 8450, displayName: host)
+                                browser.addManual(s)
+                                load(s)
+                            }
+                        }
+                    }
+
+                    if !downloader.remoteFiles.isEmpty {
+                        Section {
+                            ForEach(downloader.remoteFiles) { f in
+                                row(f)
+                            }
+                        } header: {
+                            Text("音乐集合（\(downloader.remoteFiles.count) 个文件）")
+                        }
+                    }
+
+                    if case .failed(let msg) = downloader.state {
+                        Section {
+                            Text(msg).font(.footnote).foregroundStyle(.red)
+                        }
+                    }
+
+                    Section {
+                        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                        Text("梦秋音乐 v\(v) (build \(b))")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(browser.servers) { server in
-                        HStack {
-                            Image(systemName: "desktopcomputer")
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(server.displayName)
-                                Text("\(server.host):\(server.port)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("读取列表") { load(server) }
-                                .buttonStyle(.bordered)
-                        }
-                    }
-                    HStack {
-                        TextField("或手动输入电脑 IP", text: $browser.manualHost)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.numbersAndPunctuation)
-                        Button("连接") {
-                            let host = browser.manualHost.trimmingCharacters(in: .whitespaces)
-                            guard !host.isEmpty else { return }
-                            let s = SyncServer(id: "manual-\(host)", host: host,
-                                               port: 8450, displayName: host)
-                            browser.addManual(s)
-                            load(s)
-                        }
-                    }
-                }
-
-                if !downloader.remoteFiles.isEmpty {
-                    Section {
-                        HStack(spacing: 12) {
-                            Button("全选待更新") { selectStale() }
-                            Button("全选") {
-                                for f in downloader.remoteFiles { selected.insert(f.name) }
-                                hint = "已全选 \(downloader.remoteFiles.count) 个文件，点「下载所选」重新拉取"
-                            }
-                            Button("清空") {
-                                selected = []
-                                hint = nil
-                            }
-                            Spacer()
-                            Text("已选 \(selected.count)").font(.caption).foregroundStyle(.secondary)
-                        }
-                        .font(.footnote)
-
-                        if let h = hint {
-                            Text(h)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        ForEach(downloader.remoteFiles) { f in
-                            row(f)
-                        }
-
-                        if downloader.state == .running {
-                            if let a = downloader.activeFile {
-                                Text("正在下载：\(a)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Button("停止下载", role: .destructive) { downloader.cancel() }
-                        } else {
-                            Button("下载所选（\(selected.count)）") { downloadSelected() }
-                                .disabled(selected.isEmpty || lastServer == nil)
-                        }
-                    } header: {
-                        Text("音乐集合（\(downloader.remoteFiles.count) 个文件）")
-                    }
-                }
-
-                if case .failed(let msg) = downloader.state {
-                    Section {
-                        Text(msg).font(.footnote).foregroundStyle(.red)
-                    }
-                }
-
-                Section {
-                    let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-                    let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-                    Text("梦秋音乐 v\(v) (build \(b))")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("导入")
@@ -114,15 +89,92 @@ struct ImportView: View {
         }
     }
 
+    // MARK: - 操作条（对齐鸿蒙版：一排胶囊按钮 + 下载按钮同处一排）
+
+    private var actionBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                chip("全选待更新") { selectStale() }
+                chip("全选") { selectAll() }
+                chip("清空") {
+                    selected = []
+                    hint = nil
+                }
+                Spacer(minLength: 4)
+                Text("已选 \(selected.count)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if downloader.state == .running, let a = downloader.activeFile {
+                        Text("正在下载：\(a)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if let h = hint {
+                        Text(h)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    } else {
+                        Text("先勾选要拉取的文件，再点右边下载")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Spacer(minLength: 6)
+                Button {
+                    downloadOrStop()
+                } label: {
+                    Text(downloader.state == .running ? "停止下载" : "下载所选（\(selected.count)）")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .controlSize(.large)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    private func chip(_ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color(.systemGray4), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 文件行
+
     private func row(_ f: RemoteFile) -> some View {
         let stale = downloader.staleNames.contains(f.name)
         let downloaded = downloader.localNames.contains(f.name)
         let on = selected.contains(f.name)
         return HStack(spacing: 10) {
             // 勾选框只反映"选没选"，和下载状态分开，已下载的文件也能重新拉取
-            Image(systemName: on ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(on ? Color.orange : Color.secondary)
-                .font(.system(size: 22))
+            Button {
+                if on { selected.remove(f.name) }
+                else { selected.insert(f.name) }
+            } label: {
+                Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(on ? Color.orange : Color.secondary)
+                    .font(.system(size: 24))
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(f.name).font(.caption).lineLimit(1)
                 if let p = downloader.progress[f.name] {
@@ -160,6 +212,8 @@ struct ImportView: View {
         }
     }
 
+    // MARK: - 动作
+
     private func selectStale() {
         downloader.rescanLocal()
         var n = 0
@@ -170,8 +224,30 @@ struct ImportView: View {
             n += 1
         }
         hint = n == 0
-            ? "没有检测到需要更新的文件。想强制刷新歌词：点「全选」再「下载所选」"
+            ? "没有检测到需要更新的文件。想强制刷新歌词：点「全选」再下载"
             : "已选中 \(n) 个未下载或电脑上改过的文件"
+    }
+
+    private func selectAll() {
+        for f in downloader.remoteFiles { selected.insert(f.name) }
+        hint = "已全选 \(downloader.remoteFiles.count) 个文件，点「下载所选」重新拉取"
+    }
+
+    private func downloadOrStop() {
+        if downloader.state == .running {
+            downloader.cancel()
+            hint = "正在停止…"
+            return
+        }
+        if lastServer == nil {
+            hint = "先在上方点「读取列表」连上电脑"
+            return
+        }
+        if selected.isEmpty {
+            hint = "先勾选文件：点「全选待更新」或「全选」"
+            return
+        }
+        downloadSelected()
     }
 
     private func load(_ server: SyncServer) {
