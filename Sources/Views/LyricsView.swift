@@ -21,7 +21,7 @@ struct LyricsView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 14) {
+                        VStack(spacing: 14) {
                             ForEach(Array(lines.enumerated()), id: \.element.id) { i, line in
                                 Text(line.text)
                                     .font(i == currentIdx ? .title3.bold() : .body)
@@ -36,8 +36,7 @@ struct LyricsView: View {
                         }
                         .padding(.horizontal)
                         .padding(.top, 100)
-                    }
-                    .simultaneousGesture(
+                    }                    .simultaneousGesture(
                         DragGesture(minimumDistance: 12)
                             .onChanged { _ in
                                 manualUntil = Date().addingTimeInterval(4)
@@ -45,7 +44,7 @@ struct LyricsView: View {
                     )
                     .onChange(of: currentIdx) { _, new in
                         guard new >= 0, Date() >= manualUntil else { return }
-                        withAnimation(.easeOut(duration: 0.3)) {
+                        withAnimation(.smooth(duration: 0.35)) {
                             proxy.scrollTo(new, anchor: .center)
                         }
                     }
