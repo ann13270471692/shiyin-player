@@ -49,6 +49,8 @@ class _NoRedir(urllib.request.HTTPRedirectHandler):
 
 def main():
     token = get_token()
+    p = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+    want_sha = p.stdout.strip()
     run = None
     for _ in range(80):  # 最多 ~40 分钟
         time.sleep(30)
@@ -58,10 +60,11 @@ def main():
             print("api err:", e, flush=True)
             continue
         wf = [r for r in runs.get("workflow_runs", []) if r.get("name") == "build"]
-        if not wf:
-            print("no run yet", flush=True)
+        match = [r for r in wf if r.get("head_sha") == want_sha]
+        if not match:
+            print(f"no run yet for {want_sha[:8]}", flush=True)
             continue
-        run = wf[0]
+        run = match[0]
         st, con = run["status"], run.get("conclusion")
         print(f"run {run['id']}: {st} {con or ''}", flush=True)
         if st == "completed":
@@ -83,8 +86,8 @@ def main():
                     for ln in lines[-80:]:
                         print(ln, flush=True)
         sys.exit(1)
-    # 成功：下载工件
-    arts = api(f"https://api.github.com/repos/{OWNER}/{REPO}/actions/artifacts?per_page=50", token)["artifacts"]
+    # 成功：下载该 run 自己的工件（仓库级列表排序不可靠）
+    arts = api(run["artifacts_url"], token)["artifacts"]
     target = next((a for a in arts if a["name"] == "Shiyin-unsigned" and not a["expired"]), None)
     if not target:
         print("artifact not found", flush=True)
