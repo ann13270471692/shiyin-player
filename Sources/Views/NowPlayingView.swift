@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// 品牌色，与鸿蒙版 ACCENT (#FF9F0A) 保持一致
+extension Color {
+    static let brand = Color(red: 1.0, green: 0.624, blue: 0.039)
+}
+
 struct NowPlayingView: View {
     @EnvironmentObject var engine: PlayerEngine
 
@@ -7,17 +12,20 @@ struct NowPlayingView: View {
         NavigationStack {
             Group {
                 if let cur = engine.current {
-                    VStack(spacing: 10) {
-                        ArtworkView(track: cur)
-                            .frame(width: 110, height: 110)
-
-                        VStack(spacing: 4) {
-                            Text(cur.title)
-                                .font(.headline)
-                                .multilineTextAlignment(.center)
-                            Text(cur.artist)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                    VStack(spacing: 16) {
+                        HStack(spacing: 16) {
+                            ArtworkView(track: cur)
+                                .frame(width: 84, height: 84)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(cur.title)
+                                    .font(.title3.bold())
+                                    .lineLimit(1)
+                                Text(cur.artist)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         ProgressSection()
@@ -50,16 +58,16 @@ private struct ArtworkView: View {
                     .resizable()
                     .scaledToFit()
             } else {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 18)
                     .fill(Color.secondary.opacity(0.15))
                     .overlay(
                         Image(systemName: "music.note")
-                            .font(.system(size: 64))
+                            .font(.system(size: 34))
                             .foregroundStyle(.secondary)
                     )
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .task(id: track.id) { await engine.loadArtworkIfNeeded(for: track) }
     }
 }
@@ -70,7 +78,7 @@ private struct ProgressSection: View {
     @State private var dragValue: Double = 0
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 4) {
             Slider(
                 value: Binding(
                     get: { dragging ? dragValue : engine.currentTime },
@@ -87,10 +95,12 @@ private struct ProgressSection: View {
                     }
                 }
             )
+            .tint(.brand)
+
             HStack {
                 Text(TimeFormat.seconds(dragging ? dragValue : engine.currentTime))
                 Spacer()
-                Text(TimeFormat.seconds(engine.duration))
+                Text("-" + TimeFormat.seconds(max(engine.duration - (dragging ? dragValue : engine.currentTime), 0)))
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
@@ -102,34 +112,50 @@ private struct ControlsSection: View {
     @EnvironmentObject var engine: PlayerEngine
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 40) {
-                Button { engine.previous() } label: {
-                    Image(systemName: "backward.fill").font(.title2)
-                }
-                Button { engine.togglePlay() } label: {
-                    Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 64))
-                }
-                Button { engine.next() } label: {
-                    Image(systemName: "forward.fill").font(.title2)
-                }
+        HStack {
+            Button {
+                engine.shuffle.toggle()
+                engine.orderDidChange()
+            } label: {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 19))
+                    .foregroundStyle(engine.shuffle ? Color.brand : Color.secondary)
+                    .frame(width: 44, height: 44)
             }
-            HStack(spacing: 32) {
-                Button {
-                    engine.shuffle.toggle()
-                    engine.orderDidChange()
-                } label: {
-                    Label("随机", systemImage: "shuffle")
-                        .font(.footnote)
-                        .foregroundStyle(engine.shuffle ? Color.accentColor : Color.secondary)
-                }
-                Button { engine.cycleRepeat() } label: {
-                    Label("循环", systemImage: engine.repeatMode == .one ? "repeat.1" : "repeat")
-                        .font(.footnote)
-                        .foregroundStyle(engine.repeatMode == .off ? Color.secondary : Color.accentColor)
-                }
+
+            Button { engine.previous() } label: {
+                Image(systemName: "backward.fill")
+                    .font(.system(size: 25))
+                    .frame(width: 48, height: 48)
+            }
+
+            Button { engine.togglePlay() } label: {
+                Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(Color(.systemBackground))
+                    .frame(width: 66, height: 66)
+                    .background(
+                        Circle()
+                            .fill(Color.brand)
+                            .shadow(color: Color.brand.opacity(0.30), radius: 18, y: 6)
+                    )
+            }
+
+            Button { engine.next() } label: {
+                Image(systemName: "forward.fill")
+                    .font(.system(size: 25))
+                    .frame(width: 48, height: 48)
+            }
+
+            Button { engine.cycleRepeat() } label: {
+                Image(systemName: engine.repeatMode == .one ? "repeat.1" : "repeat")
+                    .font(.system(size: 19))
+                    .foregroundStyle(engine.repeatMode == .off ? Color.secondary : Color.brand)
+                    .frame(width: 44, height: 44)
             }
         }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity)
     }
 }

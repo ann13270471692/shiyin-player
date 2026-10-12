@@ -15,13 +15,12 @@ final class PlayerEngine: ObservableObject {
     @Published private(set) var duration: Double = 0
     @Published var shuffle = false
     @Published var repeatMode: RepeatMode = .off
-    @Published var lyricOffset: Double = UserDefaults.standard.double(forKey: "lyricOffsetMs")
     /// 当前输出通路的延迟（秒）。蓝牙耳机可达 0.15–0.3s，外放约 0.01s。
     @Published private(set) var outputLatency: Double = 0
 
-    /// 歌词应使用的时刻：把"已经送出去但还没听到的声音"扣掉，再加用户手动偏移。
+    /// 歌词应使用的时刻：把"已经送出去但还没听到的声音"扣掉。
     var lyricPosition: Double {
-        max(0, currentTime - outputLatency + lyricOffset)
+        max(0, currentTime - outputLatency)
     }
 
     func refreshOutputLatency() {
@@ -30,12 +29,6 @@ final class PlayerEngine: ObservableObject {
         let l = Double(AVAudioSession.sharedInstance().outputLatency)
         guard l.isFinite, l >= 0, l < 2 else { return }
         if abs(l - outputLatency) > 0.005 { outputLatency = l }
-    }
-
-
-    func nudgeLyricOffset(_ delta: Double) {
-        lyricOffset += delta
-        UserDefaults.standard.set(lyricOffset, forKey: "lyricOffsetMs")
     }
 
     private let player = AVPlayer()
@@ -49,6 +42,8 @@ final class PlayerEngine: ObservableObject {
     private let posKey = "resumePositions"
 
     private init() {
+        // 旧版本的手动歌词偏移已移除，清掉存档避免残留值继续影响对齐
+        UserDefaults.standard.removeObject(forKey: "lyricOffsetMs")
         positionByPath = (UserDefaults.standard.dictionary(forKey: posKey) as? [String: Double]) ?? [:]
         setupSession()
         setupRemoteCommands()

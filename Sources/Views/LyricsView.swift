@@ -43,25 +43,6 @@ struct LyricsView: View {
                                 manualUntil = Date().addingTimeInterval(4)
                             }
                     )
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        HStack(spacing: 10) {
-                            Text(offsetLabel)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button("−0.5s") { engine.nudgeLyricOffset(-0.5) }
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(.thinMaterial, in: Capsule())
-                            Button("+0.5s") { engine.nudgeLyricOffset(0.5) }
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(.thinMaterial, in: Capsule())
-                            Spacer()
-                        }
-                        .padding(.vertical, 6)
-                    }
                     .onChange(of: currentIdx) { _, new in
                         guard new >= 0, Date() >= manualUntil else { return }
                         let fast = Date().timeIntervalSince(lastIdxChange) < 0.8
@@ -107,13 +88,6 @@ struct LyricsView: View {
         .onChange(of: engine.outputLatency) { _, _ in
             updateIndex(at: engine.currentTime)
         }
-    }
-
-    private var offsetLabel: String {
-        let base = String(format: "歌词偏移 %+.1fs", engine.lyricOffset)
-        return engine.outputLatency > 0.05
-            ? base + String(format: "（已自动补偿 %.0fms）", engine.outputLatency * 1000)
-            : base
     }
 
     private func loadLyrics() async {
