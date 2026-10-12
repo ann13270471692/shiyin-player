@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.0.2"
-    CURRENT_PROJECT_VERSION: "5"
+    MARKETING_VERSION: "1.0.3"
+    CURRENT_PROJECT_VERSION: "6"
     TARGETED_DEVICE_FAMILY: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 
@@ -35,8 +35,7 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
-        NSLocalNetworkUsageDescription: 拾音需要在局域网内发现你的电脑，以下载音乐文件到手机。
-        NSBonjourServices:
+        NSLocalNetworkUsageDescription: 拾音需要在局域网内发现你的电脑，以下载音乐文件到手机�?        NSBonjourServices:
           - _shiyin._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

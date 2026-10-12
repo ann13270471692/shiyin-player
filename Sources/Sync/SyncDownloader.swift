@@ -81,6 +81,8 @@ final class SyncDownloader: ObservableObject {
     @Published private(set) var progress: [String: Double] = [:]   // -1 = 失败
     @Published private(set) var speedText: [String: String] = [:]
     @Published private(set) var localNames: Set<String> = []
+    /// 电脑上已更新（mtime 不一致）的本地文件，需要重新拉取
+    @Published private(set) var staleNames: Set<String> = []
     @Published private(set) var state: DownloadState = .idle
     @Published private(set) var activeFile: String?
     @Published private var cancelRequested = false
@@ -114,12 +116,27 @@ final class SyncDownloader: ObservableObject {
         }
         remoteFiles = m.files
         rescanLocal()
+        markStale(m.files)
+    }
+
+    private func markStale(_ files: [RemoteFile]) {
+        let dir = LibraryStore.musicDirectory()
+        var s: Set<String> = []
+        for f in files where localNames.contains(f.name) {
+            let path = dir.appendingPathComponent(f.name).path
+            let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+            let m = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970
+            if m == nil || abs(m! - Double(f.mtime)) > 2 {
+                s.insert(f.name)
+            }
+        }
+        staleNames = s
     }
 
     func download(_ files: [RemoteFile], from server: SyncServer) async {
         state = .running
         cancelRequested = false
-        for f in files where !localNames.contains(f.name) {
+        for f in files where !localNames.contains(f.name) || staleNames.contains(f.name) {
             if cancelRequested { break }
             await downloadOne(f, server: server)
         }
@@ -153,6 +170,10 @@ final class SyncDownloader: ObservableObject {
         let fm = FileManager.default
         let name = f.name
         let size = f.size
+        // 电脑上文件已更新：旧断点内容不同，必须整份重下
+        if await MainActor.run { self.staleNames.contains(name) } {
+            try? fm.removeItem(at: tmp)
+        }
 
         var start = 0
         if let attrs = try? fm.attributesOfItem(atPath: tmp.path),

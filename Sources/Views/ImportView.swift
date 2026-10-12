@@ -49,10 +49,11 @@ struct ImportView: View {
                 if !downloader.remoteFiles.isEmpty {
                     Section {
                         HStack(spacing: 12) {
-                            Button("全选未下载") {
+                            Button("全选待更新") {
                                 downloader.rescanLocal()
                                 for f in downloader.remoteFiles
-                                where !downloader.localNames.contains(f.name) {
+                                where !downloader.localNames.contains(f.name)
+                                    || downloader.staleNames.contains(f.name) {
                                     selected.insert(f.name)
                                 }
                             }
@@ -110,12 +111,14 @@ struct ImportView: View {
     }
 
     private func row(_ f: RemoteFile) -> some View {
-        let already = downloader.localNames.contains(f.name)
+        let stale = downloader.staleNames.contains(f.name)
+        let already = downloader.localNames.contains(f.name) && !stale
         let on = selected.contains(f.name)
         return HStack(spacing: 10) {
-            Image(systemName: already ? "checkmark.circle.fill"
-                    : (on ? "checkmark.circle.fill" : "circle"))
-                .foregroundStyle(already ? Color.green : (on ? Color.orange : Color.secondary))
+            Image(systemName: stale ? "exclamationmark.arrow.circlepath"
+                    : (already ? "checkmark.circle.fill"
+                       : (on ? "checkmark.circle.fill" : "circle")))
+                .foregroundStyle(stale ? Color.orange : (already ? Color.green : (on ? Color.orange : Color.secondary)))
                 .font(.system(size: 20))
             VStack(alignment: .leading, spacing: 3) {
                 Text(f.name).font(.caption).lineLimit(1)
@@ -138,8 +141,12 @@ struct ImportView: View {
                 }
             }
             Spacer()
-            Text(String(format: "%.1f MB", Double(f.size) / 1_048_576))
-                .font(.caption2).foregroundStyle(.secondary)
+            if stale {
+                Text("需更新").font(.caption2).foregroundStyle(.orange)
+            } else {
+                Text(String(format: "%.1f MB", Double(f.size) / 1_048_576))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {

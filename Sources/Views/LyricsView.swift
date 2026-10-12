@@ -45,7 +45,7 @@ struct LyricsView: View {
                     )
                     .safeAreaInset(edge: .top, spacing: 0) {
                         HStack(spacing: 10) {
-                            Text(String(format: "歌词偏移 %+.1fs", engine.lyricOffset))
+                            Text(offsetLabel)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Button("−0.5s") { engine.nudgeLyricOffset(-0.5) }
@@ -104,6 +104,16 @@ struct LyricsView: View {
         .onChange(of: engine.currentTime) { _, t in
             updateIndex(at: t)
         }
+        .onChange(of: engine.outputLatency) { _, _ in
+            updateIndex(at: engine.currentTime)
+        }
+    }
+
+    private var offsetLabel: String {
+        let base = String(format: "歌词偏移 %+.1fs", engine.lyricOffset)
+        return engine.outputLatency > 0.05
+            ? base + String(format: "（已自动补偿 %.0fms）", engine.outputLatency * 1000)
+            : base
     }
 
     private func loadLyrics() async {
@@ -128,10 +138,12 @@ struct LyricsView: View {
 
     private func updateIndex(at t: Double) {
         guard !lines.isEmpty else { return }
-        let pos = t + engine.lyricOffset
+        let pos = engine.lyricPosition
         var idx = -1
         for (i, line) in lines.enumerated() {
-            if line.time <= pos + 0.15 { idx = i } else { break }
+            if line.time > pos { break }
+            // 空行只是间奏占位，不高亮：保持上一句，避免"歌词在跳但没人在唱"
+            if !line.text.trimmingCharacters(in: .whitespaces).isEmpty { idx = i }
         }
         if idx != currentIdx { currentIdx = idx }
     }

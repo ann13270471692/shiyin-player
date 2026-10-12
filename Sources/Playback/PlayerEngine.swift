@@ -16,6 +16,21 @@ final class PlayerEngine: ObservableObject {
     @Published var shuffle = false
     @Published var repeatMode: RepeatMode = .off
     @Published var lyricOffset: Double = UserDefaults.standard.double(forKey: "lyricOffsetMs")
+    /// 当前输出通路的延迟（秒）。蓝牙耳机可达 0.15–0.3s，外放约 0.01s。
+    @Published private(set) var outputLatency: Double = 0
+
+    /// 歌词应使用的时刻：把"已经送出去但还没听到的声音"扣掉，再加用户手动偏移。
+    var lyricPosition: Double {
+        max(0, currentTime - outputLatency + lyricOffset)
+    }
+
+    func refreshOutputLatency() {
+        let route = AVAudioSession.sharedInstance().currentRoute
+        let l = route.outputLatency
+        guard l.isFinite, l >= 0, l < 2 else { return }
+        if abs(l - outputLatency) > 0.005 { outputLatency = l }
+    }
+
 
     func nudgeLyricOffset(_ delta: Double) {
         lyricOffset += delta
@@ -38,7 +53,7 @@ final class PlayerEngine: ObservableObject {
         setupRemoteCommands()
         setupNotifications()
         timeToken = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] t in
             let s = CMTimeGetSeconds(t)
@@ -169,6 +184,7 @@ final class PlayerEngine: ObservableObject {
 
     private func handlePlay() {
         try? AVAudioSession.sharedInstance().setActive(true)
+        refreshOutputLatency()
         player.play()
         isPlaying = true
         updateNowPlaying()
@@ -316,6 +332,7 @@ final class PlayerEngine: ObservableObject {
             forName: AVAudioSession.routeChangeNotification,
             object: nil, queue: .main
         ) { [weak self] note in
+            Task { @MainActor in self?.refreshOutputLatency() }
             guard let info = note.userInfo,
                   let reasonValue = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
                   let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue),
