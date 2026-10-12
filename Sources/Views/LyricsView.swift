@@ -5,6 +5,7 @@ struct LyricsView: View {
     @State private var lines: [LyricLine] = []
     @State private var currentIdx = -1
     @State private var loading = false
+    @State private var manualUntil = Date.distantPast
 
     var body: some View {
         Group {
@@ -36,10 +37,35 @@ struct LyricsView: View {
                         .padding(.horizontal)
                         .padding(.top, 100)
                     }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 12)
+                            .onChanged { _ in
+                                manualUntil = Date().addingTimeInterval(4)
+                            }
+                    )
                     .onChange(of: currentIdx) { _, new in
-                        guard new >= 0 else { return }
+                        guard new >= 0, Date() >= manualUntil else { return }
                         withAnimation(.easeOut(duration: 0.3)) {
                             proxy.scrollTo(new, anchor: .center)
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if Date() < manualUntil {
+                            Button {
+                                manualUntil = .distantPast
+                                if currentIdx >= 0 {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        proxy.scrollTo(currentIdx, anchor: .center)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "location")
+                                    .font(.body)
+                                    .padding(11)
+                                    .background(.thinMaterial, in: Circle())
+                                    .shadow(radius: 3)
+                            }
+                            .padding(.bottom, 10)
                         }
                     }
                 }
