@@ -6,6 +6,7 @@ struct LyricsView: View {
     @State private var currentIdx = -1
     @State private var loading = false
     @State private var manualUntil = Date.distantPast
+    @State private var lastIdxChange = Date.distantPast
 
     var body: some View {
         Group {
@@ -44,8 +45,15 @@ struct LyricsView: View {
                     )
                     .onChange(of: currentIdx) { _, new in
                         guard new >= 0, Date() >= manualUntil else { return }
-                        withAnimation(.smooth(duration: 0.35)) {
+                        let fast = Date().timeIntervalSince(lastIdxChange) < 0.8
+                        lastIdxChange = Date()
+                        if fast {
+                            // 快嘴段落：行距太近，排队动画会连成整页滚动，直接对齐
                             proxy.scrollTo(new, anchor: .center)
+                        } else {
+                            withAnimation(.smooth(duration: 0.35)) {
+                                proxy.scrollTo(new, anchor: .center)
+                            }
                         }
                     }
                     .overlay(alignment: .bottom) {
