@@ -10,6 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select latest Xcode on runner
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Using $LATEST"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+
       - name: Show toolchain
         run: xcodebuild -version && sw_vers
 

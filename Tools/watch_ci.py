@@ -28,9 +28,23 @@ def api(url, token, raw=False):
         "User-Agent": "shiyin-build",
         "Accept": "application/vnd.github+json",
     })
-    with urllib.request.urlopen(req) as r:
+    opener = urllib.request.build_opener(_NoRedir)
+    try:
+        r = opener.open(req)
         data = r.read()
-        return data if raw else json.loads(data)
+    except urllib.error.HTTPError as e:
+        loc = e.headers.get("Location")
+        if e.code in (301, 302, 303, 307, 308) and loc:
+            data = urllib.request.urlopen(
+                urllib.request.Request(loc, headers={"User-Agent": "shiyin-build"})).read()
+        else:
+            raise
+    return data if raw else json.loads(data)
+
+
+class _NoRedir(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def main():
@@ -59,7 +73,7 @@ def main():
             jobs = api(run["jobs_url"], token)["jobs"]
             for j in jobs:
                 if j.get("conclusion") == "failure":
-                    log = api(j["logs_url"], token, raw=True).decode("utf-8", "replace")
+                    log = api(j["url"] + "/logs", token, raw=True).decode("utf-8", "replace")
                     lines = log.splitlines()
                     errs = [ln for ln in lines if "error:" in ln or "ERROR" in ln or "fatal" in ln]
                     print("=== error lines ===", flush=True)
