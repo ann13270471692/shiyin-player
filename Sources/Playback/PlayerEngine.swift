@@ -145,7 +145,7 @@ final class PlayerEngine: ObservableObject {
         currentTime = 0
 
         Task {
-            if let d = try? await item.load(.duration) {
+            if let d = try? await item.asset.load(.duration) {
                 let s = CMTimeGetSeconds(d)
                 if s.isFinite && s > 0 { self.duration = s }
             }
@@ -218,7 +218,7 @@ final class PlayerEngine: ObservableObject {
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
         ]
         if let art = artworkCache[cur.path] {
-            info[MPMediaItemPropertyArtwork] = MPMediaArtwork(artworkImage: art)
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: art.size) { _ in art }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
