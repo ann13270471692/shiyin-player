@@ -1,5 +1,5 @@
 @echo off
 chcp 65001 >nul
-cd /d "%~dp0"
-python sync_server.py "F:\DeepSeek Workspace\æ—¶äº‹åˆ†æ\éŸ³ä¹é›†åˆ"
+cd /d %~dp0
+python sync_server.py %~dp0..\..\ÒôÀÖ¼¯ºÏ
 pause
