@@ -144,6 +144,8 @@ struct LyricsView: View {
             + "封面|设计|摄影|吉他|贝斯|鼓手|弦乐|提琴|铜管|钢琴|合成|Program|Engineer|Studio|Label|Recorded|"
             + "Mixed|Master|Written|Arrang|未经许可|翻唱|禁止|ISRC|OPI|PBM|SPD|OP\\s*[:：]"
         if t.range(of: pat, options: .regularExpression) != nil { return true }
+        // (间奏) (主歌) (副歌) (桥段) 这类段落标记也不是唱出来的
+        if (t.hasPrefix("(") || t.hasPrefix("（")) && (t.hasSuffix(")") || t.hasSuffix("）")) { return true }
         // "XX ：YY" 这种标签行（如 "音乐项目总监：代诗琪"）
         return t.range(of: "^\\S{1,8}\\s*[:：]\\s*\\S", options: .regularExpression) != nil
     }
