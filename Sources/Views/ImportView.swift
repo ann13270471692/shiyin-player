@@ -7,6 +7,7 @@ struct ImportView: View {
     @State private var selected: Set<String> = []
     @State private var hint: String?
     @State private var lastServer: SyncServer?
+    @FocusState private var ipFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -47,8 +48,19 @@ struct ImportView: View {
                     }
                 }
                 .contentMargins(.bottom, 18, for: .scrollContent)
+                .scrollDismissesKeyboard(.immediately)
             }
             .navigationTitle("导入")
+            // 键盘上方一排「连接 / 完成」：键盘弹出时也能收起，
+            // 收起后底部的 曲库/播放/导入 标签栏立刻恢复可点
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("连接") { connectManual() }
+                        .fontWeight(.semibold)
+                    Button("完成") { ipFocused = false }
+                }
+            }
             .onAppear {
                 browser.start()
                 downloader.rescanLocal()
@@ -105,16 +117,10 @@ struct ImportView: View {
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .keyboardType(.numbersAndPunctuation)
-                Button("连接") {
-                    let host = browser.manualHost.trimmingCharacters(in: .whitespaces)
-                    guard !host.isEmpty else { return }
-                    let s = SyncServer(id: "manual-\(host)", host: host,
-                                       port: 8450, displayName: host)
-                    browser.addManual(s)
-                    load(s)
-                }
-                .buttonStyle(.bordered)
+                    .keyboardType(.decimalPad)
+                    .focused($ipFocused)
+                Button("连接") { connectManual() }
+                    .buttonStyle(.bordered)
             }
 
             if case .failed(let msg) = downloader.state {
@@ -287,10 +293,24 @@ struct ImportView: View {
         downloadSelected()
     }
 
+    private func connectManual() {
+        let host = browser.manualHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else {
+            hint = "先输入电脑 IP（例如 192.168.2.12）"
+            return
+        }
+        ipFocused = false
+        let s = SyncServer(id: "manual-\(host)", host: host,
+                           port: 8450, displayName: host)
+        browser.addManual(s)
+        load(s)
+    }
+
     private func load(_ server: SyncServer) {
         lastServer = server
         selected = []
         hint = nil
+        ipFocused = false
         Task { await downloader.fetchManifest(from: server) }
     }
 
