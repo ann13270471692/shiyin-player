@@ -1,0 +1,45 @@
+name: Shiyin
+options:
+  bundleIdPrefix: com.shiyin
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptySupportedDestinations: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+targets:
+  Shiyin:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    info:
+      path: .generated/Info.plist
+      properties:
+        CFBundleDisplayName: 拾音
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - audio
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        NSLocalNetworkUsageDescription: 拾音需要在局域网内发现你的电脑，以下载音乐文件到手机。
+        NSBonjourServices:
+          - _shiyin._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_NAME: Shiyin
+        PRODUCT_BUNDLE_IDENTIFIER: com.shiyin.player

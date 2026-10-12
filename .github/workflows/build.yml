@@ -1,0 +1,42 @@
+name: build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: xcodebuild -version && sw_vers
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned, arm64 device)
+        run: >
+          xcodebuild -project Shiyin.xcodeproj -scheme Shiyin
+          -configuration Release -sdk iphoneos
+          -destination 'generic/platform=iOS'
+          -derivedDataPath build
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          build
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Shiyin.app Payload/
+          zip -qr Shiyin.ipa Payload
+          ls -la Shiyin.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shiyin-unsigned
+          path: Shiyin.ipa
+          retention-days: 30
