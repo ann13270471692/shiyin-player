@@ -1,7 +1,7 @@
 # 「拾音」iPhone 本地音乐播放器 — 开发规划
 
 > 个人自用 ｜ iPhone 16 (iOS 18) ｜ SwiftUI 原生 ｜ 无 Mac 开发环境
-> 状态：**规划已确认，待开始 M0**
+> 状态：**M0–M4 代码全部完成（6 个提交），等待首次 GitHub Actions 编译 + Sideloadly 侧载验证**
 
 ## 1. 产品定义（MVP 范围）
 
