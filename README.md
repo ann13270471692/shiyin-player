@@ -16,15 +16,21 @@ SyncServer/sync_server.py   Windows 电脑上的音乐推流服务器（M3）
 ## 首次上手（M0 安装链路）
 
 ### 1. 建 GitHub 仓库并推送
+仓库已在本地提交完毕（main 分支，多个里程碑提交），只需：
 ```powershell
 cd "F:\DeepSeek Workspace\时事分析\shiyin-player"
-git init -b main
-git add -A
-git commit -m "M0: skeleton + CI"
 # 在 github.com 新建一个 public 仓库（public 的 macOS 编译分钟数免费），例如 shiyin-player
 git remote add origin https://github.com/<你的用户名>/shiyin-player.git
 git push -u origin main
 ```
+首次 push 会弹出 Git 登录窗口（浏览器授权），按提示登录即可。
+
+#### 推送排障（大陆网络常见）
+| 现象 | 处理 |
+|---|---|
+| `Recv failure / Timed out` 连接超时 | 重试 2–3 次；有代理则 `git -c http.proxy=http://127.0.0.1:7890 push -u origin main`（端口换成你的） |
+| `403 / Support for password authentication was removed` | GitHub 网页 → Settings → Developer settings → Personal access tokens → **Tokens (classic)** 勾选 `repo` 生成；push 时密码栏粘贴该 token |
+| 登录窗口打不开 | 改用 SSH：网页生成 SSH key 后 `git remote set-url origin git@github.com:<用户名>/shiyin-player.git` |
 
 ### 2. 等编译完成，下载 IPA
 仓库页 → **Actions** → 最新一次运行（绿色 ✓）→ Artifacts 里下载 **Shiyin-unsigned**（解压得到 `Shiyin.ipa`）。
