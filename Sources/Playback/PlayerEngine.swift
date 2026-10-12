@@ -275,6 +275,18 @@ final class PlayerEngine: ObservableObject {
         }
 
         NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            // 损坏 / 不支持的文件：跳过继续播下一首，而不是无声卡死
+            if let item = note.object as? AVPlayerItem,
+               let err = item.playbackError ?? item.error {
+                NSLog("playback failed: %@", err.localizedDescription)
+            }
+            Task { @MainActor in self?.advance(by: 1) }
+        }
+
+        NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: nil, queue: .main
         ) { [weak self] note in
