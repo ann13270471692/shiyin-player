@@ -67,18 +67,29 @@ private struct ArtworkView: View {
 
 private struct ProgressSection: View {
     @EnvironmentObject var engine: PlayerEngine
+    @State private var dragging = false
+    @State private var dragValue: Double = 0
 
     var body: some View {
         VStack(spacing: 2) {
             Slider(
                 value: Binding(
-                    get: { engine.currentTime },
-                    set: { engine.seek(to: $0) }
+                    get: { dragging ? dragValue : engine.currentTime },
+                    set: { v in if dragging { dragValue = v } else { engine.seek(to: v) } }
                 ),
-                in: 0...max(engine.duration, 1)
+                in: 0...max(engine.duration, 1),
+                onEditingChanged: { started in
+                    if started {
+                        dragValue = engine.currentTime
+                        dragging = true
+                    } else {
+                        engine.seek(to: dragValue)
+                        dragging = false
+                    }
+                }
             )
             HStack {
-                Text(TimeFormat.seconds(engine.currentTime))
+                Text(TimeFormat.seconds(dragging ? dragValue : engine.currentTime))
                 Spacer()
                 Text(TimeFormat.seconds(engine.duration))
             }
