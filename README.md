@@ -36,13 +36,19 @@ git push -u origin main
 仓库页 → **Actions** → 最新一次运行（绿色 ✓）→ Artifacts 里下载 **Shiyin-unsigned**（解压得到 `Shiyin.ipa`）。
 
 ### 3. Sideloadly 签名安装（Windows）
-1. 下载安装 [Sideloadly](https://sideloadly.io)；同时安装 Apple「Apple 设备」应用或 iTunes（提供 iPhone USB 驱动）
-2. iPhone：设置 → 隐私与安全性 → **开发者模式** 打开；用数据线连电脑并"信任此电脑"
-3. Sideloadly 拖入 `Shiyin.ipa` → 填你的 **Apple ID**（就是手机上登录那个）→ Start → 等它签名+安装
-4. 手机桌面出现「拾音」，点开即可
+
+> **本机已就绪**（2026-10-12 配置完成）：
+> - Sideloadly：`C:\Users\KSMLQZ\AppData\Local\Sideloadly\sideloadly.exe`（含自动续期守护进程）
+> - iPhone 驱动：网页版 iTunes 12.13 + Apple Mobile Device Support 20.0.0.35（服务运行中）
+> - 最新 IPA：`shiyin-player\build\Shiyin.ipa`（CI 自动下载，`python Tools\watch_ci.py` 获取）
+
+1. iPhone 用**数据线**连电脑，弹窗点「信任」
+2. iPhone：设置 → 隐私与安全性 → **开发者模式** 打开（列表没有就先插 USB 信任一次）
+3. 打开 Sideloadly → 拖入 `Shiyin.ipa` → 填你的 **Apple ID**（就是手机上登录那个）→ Start → 等它签名+安装
+4. 手机桌面出现「拾音」；若提示未受信任：设置 → 通用 → VPN与设备管理 → 信任你的 Apple ID
 
 ### 4. 7 天续期（免费 Apple ID 的限制）
-免费账号签名有效期 7 天，到期 App 打不开：**重开 Sideloadly，用同一个 .ipa 再 Start 一次**（1 分钟，App 内已下载的音乐不会丢）。以后可考虑 $99/年 开发者账号，签名一年有效。
+免费账号签名有效期 7 天。Sideloadly 的后台守护（sideloadlydaemon）会在到期前自动重签；若失效：重开 Sideloadly，用同一个 .ipa 再 Start 一次（1 分钟，App 内已下载的音乐不会丢）。以后可考虑 $99/年 开发者账号，签名一年有效。
 
 ## 局域网拉歌（M3）
 1. 电脑：`pip install zeroconf`，双击 `SyncServer\启动同步服务器.bat`（首次弹防火墙 → 专用网络允许）
