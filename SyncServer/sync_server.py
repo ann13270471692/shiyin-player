@@ -102,6 +102,28 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def get_local_ip():
+    # 优先选「默认路由网关与本机 IP 同网段」的物理网卡（避开 VPN/虚拟网卡劫持），
+    # 用 route print 的数字表解析，与系统语言无关。
+    try:
+        import subprocess
+        out = subprocess.run(["route", "print", "0.0.0.0"], capture_output=True, text=True,
+                             encoding="gbk", errors="ignore").stdout
+        best = None
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 4 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                gw, iface = parts[2], parts[3]
+                metric = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+                if iface.startswith("169.254.") or iface.startswith("127."):
+                    continue
+                same_subnet = gw.rsplit(".", 1)[0] == iface.rsplit(".", 1)[0]
+                score = (0 if same_subnet else 1, metric)
+                if best is None or score < best[0]:
+                    best = (score, iface)
+        if best:
+            return best[1]
+    except Exception:
+        pass
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("8.8.8.8", 80))
@@ -120,7 +142,7 @@ def advertise(ip):
         print("[提示] 未安装 zeroconf，手机将无法自动发现（可手动输 IP）。安装: pip install zeroconf")
         return None
     import struct
-    zc = Zeroconf()
+    zc = Zeroconf(interfaces=[ip])  # 只从物理局域网网卡广播，避免 VPN 网卡抢组播
     host = re.sub(r"[^A-Za-z0-9-]", "-", socket.gethostname())[:20] or "pc"
     info = ServiceInfo(
         "_shiyin._tcp.local.",
