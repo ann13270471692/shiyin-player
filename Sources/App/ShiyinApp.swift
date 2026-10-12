@@ -2,24 +2,28 @@ import SwiftUI
 
 @main
 struct ShiyinApp: App {
+    @StateObject private var library = LibraryStore()
+    @StateObject private var engine = PlayerEngine.shared
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environmentObject(library)
+                .environmentObject(engine)
+                .onAppear { library.refresh() }
         }
     }
 }
 
-struct ContentView: View {
+struct RootView: View {
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "music.note.list")
-                .font(.system(size: 72))
-                .foregroundStyle(.tint)
-            Text("拾音")
-                .font(.largeTitle.bold())
-            Text("M0 · 安装链路验证成功 🎉")
-                .foregroundStyle(.secondary)
+        TabView {
+            LibraryView()
+                .tabItem { Label("曲库", systemImage: "music.note.list") }
+            NowPlayingView()
+                .tabItem { Label("播放", systemImage: "play.circle") }
+            ImportView()
+                .tabItem { Label("导入", systemImage: "wifi") }
         }
-        .padding()
     }
 }
