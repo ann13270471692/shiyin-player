@@ -7,13 +7,13 @@ struct NowPlayingView: View {
         NavigationStack {
             Group {
                 if let cur = engine.current {
-                    VStack(spacing: 14) {
+                    VStack(spacing: 10) {
                         ArtworkView(track: cur)
-                            .frame(width: 160, height: 160)
+                            .frame(width: 110, height: 110)
 
                         VStack(spacing: 4) {
                             Text(cur.title)
-                                .font(.title3.bold())
+                                .font(.headline)
                                 .multilineTextAlignment(.center)
                             Text(cur.artist)
                                 .font(.subheadline)
@@ -23,7 +23,6 @@ struct NowPlayingView: View {
                         ProgressSection()
                         ControlsSection()
 
-                        Divider()
                         LyricsView()
                     }
                     .padding(.horizontal)

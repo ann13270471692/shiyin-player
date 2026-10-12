@@ -43,6 +43,25 @@ struct LyricsView: View {
                                 manualUntil = Date().addingTimeInterval(4)
                             }
                     )
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        HStack(spacing: 10) {
+                            Text(String(format: "歌词偏移 %+.1fs", engine.lyricOffset))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("−0.5s") { engine.nudgeLyricOffset(-0.5) }
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(.thinMaterial, in: Capsule())
+                            Button("+0.5s") { engine.nudgeLyricOffset(0.5) }
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(.thinMaterial, in: Capsule())
+                            Spacer()
+                        }
+                        .padding(.vertical, 6)
+                    }
                     .onChange(of: currentIdx) { _, new in
                         guard new >= 0, Date() >= manualUntil else { return }
                         let fast = Date().timeIntervalSince(lastIdxChange) < 0.8
@@ -109,9 +128,10 @@ struct LyricsView: View {
 
     private func updateIndex(at t: Double) {
         guard !lines.isEmpty else { return }
+        let pos = t + engine.lyricOffset
         var idx = -1
         for (i, line) in lines.enumerated() {
-            if line.time <= t + 0.15 { idx = i } else { break }
+            if line.time <= pos + 0.15 { idx = i } else { break }
         }
         if idx != currentIdx { currentIdx = idx }
     }

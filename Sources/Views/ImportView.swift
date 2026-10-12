@@ -85,6 +85,14 @@ struct ImportView: View {
                         Text(msg).font(.footnote).foregroundStyle(.red)
                     }
                 }
+
+                Section {
+                    let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                    let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                    Text("梦秋音乐 v\(v) (build \(b))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("导入")
             .onAppear {

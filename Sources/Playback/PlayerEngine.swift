@@ -15,6 +15,12 @@ final class PlayerEngine: ObservableObject {
     @Published private(set) var duration: Double = 0
     @Published var shuffle = false
     @Published var repeatMode: RepeatMode = .off
+    @Published var lyricOffset: Double = UserDefaults.standard.double(forKey: "lyricOffsetMs")
+
+    func nudgeLyricOffset(_ delta: Double) {
+        lyricOffset += delta
+        UserDefaults.standard.set(lyricOffset, forKey: "lyricOffsetMs")
+    }
 
     private let player = AVPlayer()
     private var queue: [Track] = []
