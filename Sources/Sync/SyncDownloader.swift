@@ -120,13 +120,13 @@ final class SyncDownloader: ObservableObject {
 }
 
 // AsyncBytes 的分块读取（避免逐字节写 FileHandle 的调用开销）
-private struct ByteChunks<S: AsyncSequence>: AsyncSequence where S.Element == UInt8 {
+fileprivate struct ByteChunks<S: AsyncSequence>: AsyncSequence where S.Element == UInt8 {
     typealias Element = Data
     let base: S
     let size: Int
 
     struct Iterator: AsyncIteratorProtocol {
-        var base: S.Iterator
+        var base: S.AsyncIterator
         let size: Int
         mutating func next() async throws -> Data? {
             var buf = Data()
@@ -147,7 +147,7 @@ private struct ByteChunks<S: AsyncSequence>: AsyncSequence where S.Element == UI
 }
 
 extension URLSession.AsyncBytes {
-    func forChunks(of size: Int) -> ByteChunks<URLSession.AsyncBytes> {
+    fileprivate func forChunks(of size: Int) -> ByteChunks<URLSession.AsyncBytes> {
         ByteChunks(base: self, size: size)
     }
 }

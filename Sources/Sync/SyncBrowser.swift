@@ -64,8 +64,9 @@ final class SyncBrowser: NSObject, ObservableObject, NetServiceBrowserDelegate, 
             for addr in sender.addresses ?? [] {
                 if addr.withUnsafeBytes({ $0.load(as: sa_family_t.self) }) == sa_family_t(AF_INET),
                    let sin = addr.withUnsafeBytes({ $0.baseAddress?.assumingMemoryBound(to: sockaddr_in.self) }) {
+                    var sinAddr = sin.pointee.sin_addr
                     var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                    if let p = inet_ntop(AF_INET, &sin.pointee.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN)) {
+                    if let p = inet_ntop(AF_INET, &sinAddr, &buf, socklen_t(INET_ADDRSTRLEN)) {
                         host = String(cString: p)
                         break
                     }
