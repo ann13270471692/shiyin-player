@@ -1,6 +1,11 @@
 import SwiftUI
+import Combine
 
 struct LyricsView: View {
+    // 0.1s 心跳：和鸿蒙版一样按墙钟重算当前行，
+    // 不依赖 onChange 是否被合并/漏发
+    private static let heartbeat = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
     @EnvironmentObject var engine: PlayerEngine
     @State private var lines: [LyricLine] = []
     @State private var currentIdx = -1
@@ -87,6 +92,9 @@ struct LyricsView: View {
         }
         .onChange(of: engine.outputLatency) { _, _ in
             updateIndex(at: engine.currentTime)
+        }
+        .onReceive(Self.heartbeat) { _ in
+            if !lines.isEmpty { updateIndex(at: engine.currentTime) }
         }
     }
 

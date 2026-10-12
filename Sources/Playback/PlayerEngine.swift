@@ -18,9 +18,24 @@ final class PlayerEngine: ObservableObject {
     /// 当前输出通路的延迟（秒）。蓝牙耳机可达 0.15–0.3s，外放约 0.01s。
     @Published private(set) var outputLatency: Double = 0
 
-    /// 歌词应使用的时刻：把"已经送出去但还没听到的声音"扣掉。
+    // 墙钟插值：AVPlayer 的观察者 0.1s 才回一次，中间用墙钟补齐，
+    // 做法和鸿蒙版一致，避免歌词比声音慢半拍。
+    private var anchorMedia: Double = 0
+    private var anchorWall: Date? = nil
+
+    /// 歌词应使用的时刻：墙钟插值 − 输出通路延迟（上限 0.35s，防止异常值把歌词压成 0）。
     var lyricPosition: Double {
-        max(0, currentTime - outputLatency)
+        var t = currentTime
+        if isPlaying, let w = anchorWall {
+            let est = anchorMedia + Date().timeIntervalSince(w)
+            t = duration > 0 ? min(est, duration) : est
+        }
+        return max(0, t - min(outputLatency, 0.35))
+    }
+
+    private func setAnchor(_ t: Double) {
+        anchorMedia = t
+        anchorWall = isPlaying ? Date() : nil
     }
 
     func refreshOutputLatency() {
@@ -54,7 +69,10 @@ final class PlayerEngine: ObservableObject {
         ) { [weak self] t in
             let s = CMTimeGetSeconds(t)
             guard s.isFinite else { return }
-            Task { @MainActor in self?.currentTime = s }
+            Task { @MainActor in
+                self?.currentTime = s
+                self?.setAnchor(s)
+            }
         }
     }
 
@@ -91,6 +109,7 @@ final class PlayerEngine: ObservableObject {
         savePosition()
         player.pause()
         isPlaying = false
+        anchorWall = nil
         updateNowPlaying()
     }
 
@@ -104,6 +123,7 @@ final class PlayerEngine: ObservableObject {
     func seek(to seconds: Double) {
         player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         currentTime = seconds
+        setAnchor(seconds)
         updateNowPlaying()
     }
 
@@ -183,6 +203,7 @@ final class PlayerEngine: ObservableObject {
         refreshOutputLatency()
         player.play()
         isPlaying = true
+        setAnchor(currentTime)
         updateNowPlaying()
     }
 
