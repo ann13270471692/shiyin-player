@@ -12,7 +12,7 @@ struct ImportView: View {
             List {
                 Section("发现的电脑") {
                     if browser.servers.isEmpty {
-                        Text("自动搜索中… 请确认电脑上运行着 sync_server.py，且手机与其在同一 WiFi")
+                        Text("自动搜索中… 请确认电脑上运行着「启动同步服务器.bat」，且手机与其在同一 WiFi")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -34,6 +34,7 @@ struct ImportView: View {
                         TextField("或手动输入电脑 IP", text: $browser.manualHost)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            .keyboardType(.numbersAndPunctuation)
                         Button("连接") {
                             let host = browser.manualHost.trimmingCharacters(in: .whitespaces)
                             guard !host.isEmpty else { return }
@@ -46,23 +47,36 @@ struct ImportView: View {
                 }
 
                 if !downloader.remoteFiles.isEmpty {
-                    Section("音乐集合（\(downloader.remoteFiles.count) 个文件）") {
-                        HStack(spacing: 16) {
+                    Section {
+                        HStack(spacing: 12) {
                             Button("全选未下载") {
+                                downloader.rescanLocal()
                                 for f in downloader.remoteFiles
                                 where !downloader.localNames.contains(f.name) {
                                     selected.insert(f.name)
                                 }
                             }
-                            Button("清空选择") { selected = [] }
+                            Button("全选") {
+                                for f in downloader.remoteFiles { selected.insert(f.name) }
+                            }
+                            Button("清空") { selected = [] }
                             Spacer()
+                            Text("已选 \(selected.count)").font(.caption).foregroundStyle(.secondary)
                         }
                         .font(.footnote)
+
                         ForEach(downloader.remoteFiles) { f in
                             row(f)
                         }
-                        Button("下载所选（\(selected.count)）") { downloadSelected() }
-                            .disabled(selected.isEmpty || lastServer == nil)
+
+                        if downloader.state == .running {
+                            Button("停止下载", role: .destructive) { downloader.cancel() }
+                        } else {
+                            Button("下载所选（\(selected.count)）") { downloadSelected() }
+                                .disabled(selected.isEmpty || lastServer == nil)
+                        }
+                    } header: {
+                        Text("音乐集合（\(downloader.remoteFiles.count) 个文件）")
                     }
                 }
 
@@ -73,22 +87,27 @@ struct ImportView: View {
                 }
             }
             .navigationTitle("导入")
-            .onAppear { browser.start() }
+            .onAppear {
+                browser.start()
+                downloader.rescanLocal()
+            }
             .onDisappear { browser.stop() }
         }
     }
 
     private func row(_ f: RemoteFile) -> some View {
         let already = downloader.localNames.contains(f.name)
+        let on = selected.contains(f.name)
         return HStack(spacing: 10) {
             Image(systemName: already ? "checkmark.circle.fill"
-                    : (selected.contains(f.name) ? "largecircle.fill.circle" : "circle"))
-                .foregroundStyle(already ? Color.green : Color.secondary)
+                    : (on ? "checkmark.circle.fill" : "circle"))
+                .foregroundStyle(already ? Color.green : (on ? Color.orange : Color.secondary))
+                .font(.system(size: 20))
             VStack(alignment: .leading, spacing: 3) {
                 Text(f.name).font(.caption).lineLimit(1)
                 if let p = downloader.progress[f.name] {
                     if p < 0 {
-                        Text("下载失败，可重新勾选再试")
+                        Text("下载失败，已自动重试仍未成功——再点一次「下载所选」可续传")
                             .font(.caption2).foregroundStyle(.red)
                     } else if p >= 1 {
                         Text("完成").font(.caption2).foregroundStyle(.green)
@@ -104,7 +123,7 @@ struct ImportView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard !already else { return }
-            if selected.contains(f.name) { selected.remove(f.name) }
+            if on { selected.remove(f.name) }
             else { selected.insert(f.name) }
         }
     }

@@ -58,21 +58,23 @@ final class SyncBrowser: NSObject, ObservableObject, NetServiceBrowserDelegate, 
     // MARK: - NetServiceDelegate
 
     nonisolated func netServiceDidResolveAddress(_ sender: NetService) {
-        var host = sender.hostName
-        if host == nil {
-            // mDNS 主机名解析失败时退回第一个 IP 地址
-            for addr in sender.addresses ?? [] {
-                if addr.withUnsafeBytes({ $0.load(as: sa_family_t.self) }) == sa_family_t(AF_INET),
-                   let sin = addr.withUnsafeBytes({ $0.baseAddress?.assumingMemoryBound(to: sockaddr_in.self) }) {
-                    var sinAddr = sin.pointee.sin_addr
-                    var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                    if let p = inet_ntop(AF_INET, &sinAddr, &buf, socklen_t(INET_ADDRSTRLEN)) {
-                        host = String(cString: p)
+        // 优先用 mDNS 直接解析到的 IPv4 地址（Windows 主机名在手机上常解析不了）
+        var host: String?
+        for addr in sender.addresses ?? [] {
+            if addr.withUnsafeBytes({ $0.load(as: sa_family_t.self) }) == sa_family_t(AF_INET),
+               let sin = addr.withUnsafeBytes({ $0.baseAddress?.assumingMemoryBound(to: sockaddr_in.self) }) {
+                var sinAddr = sin.pointee.sin_addr
+                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                if let p = inet_ntop(AF_INET, &sinAddr, &buf, socklen_t(INET_ADDRSTRLEN)) {
+                    let ip = String(cString: p)
+                    if !ip.hasPrefix("127.") && !ip.hasPrefix("169.254.") {
+                        host = ip
                         break
                     }
                 }
             }
         }
+        if host == nil { host = sender.hostName }
         guard let host else { return }
         let server = SyncServer(id: sender.name, host: host, port: sender.port,
                                 displayName: sender.name)

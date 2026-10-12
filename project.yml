@@ -23,7 +23,8 @@ targets:
     info:
       path: .generated/Info.plist
       properties:
-        CFBundleDisplayName: 拾音
+        CFBundleDisplayName: 梦秋音乐
+        CFBundleName: Shiyin
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
