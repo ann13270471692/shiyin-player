@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 品牌色，与鸿蒙版 ACCENT (#FF9F0A) 保持一致
 extension Color {
@@ -7,6 +8,8 @@ extension Color {
 
 struct NowPlayingView: View {
     @EnvironmentObject var engine: PlayerEngine
+    @State private var toastText: String?
+    @State private var toastID = 0
 
     var body: some View {
         NavigationStack {
@@ -29,7 +32,7 @@ struct NowPlayingView: View {
                         }
 
                         ProgressSection()
-                        ControlsSection()
+                        ControlsSection { mode in showToast(mode) }
 
                         LyricsView()
                     }
@@ -42,7 +45,32 @@ struct NowPlayingView: View {
                     )
                 }
             }
+            // 切换随机 / 循环后的轻量 toast：短暂显示模式名
+            .overlay(alignment: .bottom) {
+                if let t = toastText {
+                    Text(t)
+                        .font(.footnote.weight(.medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                        .transition(.opacity)
+                        .padding(.bottom, 10)
+                }
+            }
             .navigationTitle("播放")
+        }
+    }
+
+    private func showToast(_ text: String) {
+        toastID += 1
+        let id = toastID
+        withAnimation(.easeOut(duration: 0.2)) { toastText = text }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            if id == toastID {
+                withAnimation(.easeIn(duration: 0.25)) { toastText = nil }
+            }
         }
     }
 }
@@ -110,17 +138,25 @@ private struct ProgressSection: View {
 
 private struct ControlsSection: View {
     @EnvironmentObject var engine: PlayerEngine
+    let onModeChange: (String) -> Void
 
     var body: some View {
         HStack {
+            // 随机：状态直接读引擎的 @Published shuffle，点击后立刻变色并重建顺序
             Button {
-                engine.shuffle.toggle()
-                engine.orderDidChange()
+                withAnimation(.snappy(duration: 0.25)) { engine.toggleShuffle() }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onModeChange(engine.shuffle ? "随机播放" : "顺序播放")
             } label: {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 19))
-                    .foregroundStyle(engine.shuffle ? Color.brand : Color.secondary)
-                    .frame(width: 44, height: 44)
+                VStack(spacing: 2) {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: 19))
+                        .foregroundStyle(engine.shuffle ? Color.brand : Color.secondary)
+                        .frame(width: 44, height: 44)
+                    Text(engine.shuffle ? "随机" : "顺序")
+                        .font(.caption2)
+                        .foregroundStyle(engine.shuffle ? Color.brand : Color.secondary)
+                }
             }
 
             Button { engine.previous() } label: {
@@ -147,15 +183,42 @@ private struct ControlsSection: View {
                     .frame(width: 48, height: 48)
             }
 
-            Button { engine.cycleRepeat() } label: {
-                Image(systemName: engine.repeatMode == .one ? "repeat.1" : "repeat")
-                    .font(.system(size: 19))
-                    .foregroundStyle(engine.repeatMode == .off ? Color.secondary : Color.brand)
-                    .frame(width: 44, height: 44)
+            // 循环：三态 Off → All → One，状态直接读引擎的 @Published repeatMode
+            Button {
+                withAnimation(.snappy(duration: 0.25)) { engine.cycleRepeat() }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onModeChange(repeatToastText)
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: engine.repeatMode == .one ? "repeat.1" : "repeat")
+                        .font(.system(size: 19))
+                        .foregroundStyle(engine.repeatMode == .off ? Color.secondary : Color.brand)
+                        .frame(width: 44, height: 44)
+                    Text(repeatModeText)
+                        .font(.caption2)
+                        .foregroundStyle(engine.repeatMode == .off ? Color.secondary : Color.brand)
+                }
             }
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity)
+    }
+
+    /// 按钮下方的模式文字：循环 / 单曲 / 不循环
+    private var repeatModeText: String {
+        switch engine.repeatMode {
+        case .off: return "不循环"
+        case .all: return "循环"
+        case .one: return "单曲"
+        }
+    }
+
+    private var repeatToastText: String {
+        switch engine.repeatMode {
+        case .off: return "不循环"
+        case .all: return "列表循环"
+        case .one: return "单曲循环"
+        }
     }
 }

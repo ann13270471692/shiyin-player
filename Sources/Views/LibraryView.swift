@@ -11,7 +11,12 @@ enum SortKey: String, CaseIterable, Identifiable {
 struct LibraryView: View {
     @EnvironmentObject var library: LibraryStore
     @EnvironmentObject var engine: PlayerEngine
+    @EnvironmentObject var downloader: SyncDownloader
     @State private var search = ""
+    @State private var trackToDelete: Track?
+    @State private var showDeleteConfirm = false
+    @State private var deleteError: String?
+    @State private var showDeleteError = false
     @AppStorage("librarySortKey") private var sortKeyRaw = SortKey.file.rawValue
 
     private var sortKey: SortKey {
@@ -50,43 +55,56 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(displayed) { track in
-                    Button {
-                        engine.playQueue(displayed, startAt: track)
-                    } label: {
-                        HStack(spacing: 10) {
-                            if engine.current?.id == track.id {
-                                Image(systemName: engine.isPlaying ? "waveform" : "music.note")
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.accentColor)
-                                    .symbolEffect(.variableColor.iterative,
-                                                 isActive: engine.isPlaying)
-                            } else {
-                                Image(systemName: "music.note")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(track.title)
-                                    .font(.body)
-                                    .foregroundStyle(engine.current?.id == track.id
-                                                     ? Color.accentColor : Color.primary)
-                                Text(track.artist)
-                                    .font(.caption)
+                Section {
+                    ForEach(displayed) { track in
+                        Button {
+                            engine.playQueue(displayed, startAt: track)
+                        } label: {
+                            HStack(spacing: 10) {
+                                if engine.current?.id == track.id {
+                                    Image(systemName: engine.isPlaying ? "waveform" : "music.note")
+                                        .font(.subheadline)
+                                        .foregroundStyle(Color.accentColor)
+                                        .symbolEffect(.variableColor.iterative,
+                                                     isActive: engine.isPlaying)
+                                } else {
+                                    Image(systemName: "music.note")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(track.title)
+                                        .font(.body)
+                                        .foregroundStyle(engine.current?.id == track.id
+                                                         ? Color.accentColor : Color.primary)
+                                    Text(track.artist)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                if track.hasLyrics {
+                                    Image(systemName: "text.bubble")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Text(TimeFormat.seconds(track.duration))
+                                    .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
                             }
-                            Spacer(minLength: 8)
-                            if track.hasLyrics {
-                                Image(systemName: "text.bubble")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(TimeFormat.seconds(track.duration))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .onLongPressGesture(minimumDuration: 0.4) {
+                            // 长按：弹出「从手机删除」确认对话框
+                            trackToDelete = track
+                            showDeleteConfirm = true
                         }
                     }
-                    .buttonStyle(.plain)
+                } header: {
+                    if !displayed.isEmpty {
+                        Text("长按歌曲可删除（只删手机副本）")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("曲库（\(library.tracks.count)）")
@@ -105,6 +123,22 @@ struct LibraryView: View {
                 }
             }
             .refreshable { library.refresh() }
+            .confirmationDialog("从手机删除", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("删除", role: .destructive) {
+                    if let t = trackToDelete { delete(t) }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                if let t = trackToDelete {
+                    Text("\(t.title) — \(t.artist)")
+                    Text("只删除手机上已下载的副本，电脑上的文件不受影响")
+                }
+            }
+            .alert("删除失败", isPresented: $showDeleteError, presenting: deleteError) { _ in
+                Button("好", role: .cancel) {}
+            } message: { msg in
+                Text(msg)
+            }
             .overlay {
                 if library.tracks.isEmpty {
                     ContentUnavailableView(
@@ -115,5 +149,24 @@ struct LibraryView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 删除手机副本
+
+    private func delete(_ track: Track) {
+        // 正在播放的正是它：先停止播放、清空「正在播放」状态，再删文件
+        if engine.current?.id == track.id {
+            engine.stopAndClear()
+        }
+        engine.forgetTrack(track.path)
+        do {
+            try library.deleteLocalCopy(of: track)   // 内部会 refresh() 刷新曲库列表
+        } catch {
+            deleteError = "无法删除「\(track.title)」：\(error.localizedDescription)"
+            showDeleteError = true
+            return
+        }
+        // 清掉下载记录与记住的 mtime，导入页里该文件重新显示为「未下载」
+        downloader.forgetLocalCopy(of: track.url)
     }
 }

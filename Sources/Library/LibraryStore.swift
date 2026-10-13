@@ -39,6 +39,18 @@ final class LibraryStore: ObservableObject {
         Task { await self.loadDurations() }
     }
 
+    /// 删除一首歌的手机本地副本（音频文件 + 同名 .lrc，若存在），
+    /// 电脑上的文件不受影响。失败时抛出，由调用方提示用户。
+    func deleteLocalCopy(of track: Track) throws {
+        let fm = FileManager.default
+        try fm.removeItem(at: track.url)
+        let lrc = track.url.deletingPathExtension().appendingPathExtension("lrc")
+        if fm.fileExists(atPath: lrc.path) {
+            try fm.removeItem(at: lrc)
+        }
+        refresh()
+    }
+
     /// "01 - 杨宗纬 - 其实都没有" → (其实都没有, 杨宗纬)
     static func parseFilename(_ name: String) -> (title: String, artist: String) {
         let parts = name.components(separatedBy: " - ")

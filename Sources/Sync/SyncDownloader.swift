@@ -98,6 +98,18 @@ final class SyncDownloader: ObservableObject {
         markStale(remoteFiles)
     }
 
+    /// 手机副本被删除后：去掉「已下载」记录与记住的电脑 mtime，
+    /// 让导入页把该文件重新显示为「未下载」，之后可以重新下载。
+    func forgetLocalCopy(of url: URL) {
+        let name = url.lastPathComponent
+        localNames.remove(name)
+        staleNames.remove(name)
+        progress.removeValue(forKey: name)
+        speedText.removeValue(forKey: name)
+        knownMtimes.removeValue(forKey: name)
+        UserDefaults.standard.set(knownMtimes, forKey: "remoteMtimes")
+    }
+
     func cancel() {
         cancelRequested = true
         box.cancelCurrent()

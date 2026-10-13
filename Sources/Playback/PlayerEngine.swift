@@ -13,8 +13,13 @@ final class PlayerEngine: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var currentTime: Double = 0
     @Published private(set) var duration: Double = 0
-    @Published var shuffle = false
-    @Published var repeatMode: RepeatMode = .off
+    // 随机 / 循环模式：点击即写入 UserDefaults，启动时恢复（见 init）
+    @Published var shuffle = false {
+        didSet { UserDefaults.standard.set(shuffle, forKey: shuffleKey) }
+    }
+    @Published var repeatMode: RepeatMode = .off {
+        didSet { UserDefaults.standard.set(repeatMode.rawValue, forKey: repeatKey) }
+    }
     /// 当前输出通路的延迟（秒）。蓝牙耳机可达 0.15–0.3s，外放约 0.01s。
     @Published private(set) var outputLatency: Double = 0
 
@@ -55,11 +60,16 @@ final class PlayerEngine: ObservableObject {
     private var artworkCache: [String: UIImage] = [:]
     private var lyricsCache: [String: String] = [:]
     private let posKey = "resumePositions"
+    private let shuffleKey = "play.shuffle"
+    private let repeatKey = "play.repeatMode"
 
     private init() {
         // 旧版本的手动歌词偏移已移除，清掉存档避免残留值继续影响对齐
         UserDefaults.standard.removeObject(forKey: "lyricOffsetMs")
         positionByPath = (UserDefaults.standard.dictionary(forKey: posKey) as? [String: Double]) ?? [:]
+        // 恢复上次退出前的随机 / 循环模式（init 里赋值不触发 didSet，不会多余回写）
+        shuffle = UserDefaults.standard.bool(forKey: shuffleKey)
+        repeatMode = RepeatMode(rawValue: UserDefaults.standard.integer(forKey: repeatKey)) ?? .off
         setupSession()
         setupRemoteCommands()
         setupNotifications()
@@ -139,8 +149,38 @@ final class PlayerEngine: ObservableObject {
         }
     }
 
+    /// 切换随机播放，并重建播放顺序（保持当前歌曲位置）
+    func toggleShuffle() {
+        shuffle.toggle()
+        orderDidChange()
+    }
+
     func cycleRepeat() {
         repeatMode = RepeatMode(rawValue: (repeatMode.rawValue + 1) % 3) ?? .off
+    }
+
+    /// 停止播放并清空「正在播放」状态（删除当前曲目时先调用，再删文件）
+    func stopAndClear() {
+        savePosition()
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        isPlaying = false
+        current = nil
+        currentTime = 0
+        duration = 0
+        anchorWall = nil
+        queue = []
+        order = []
+        orderPos = 0
+        updateNowPlaying()
+    }
+
+    /// 删除歌曲后清掉它的断点续播位置与封面 / 歌词缓存
+    func forgetTrack(_ path: String) {
+        positionByPath.removeValue(forKey: path)
+        UserDefaults.standard.set(positionByPath, forKey: posKey)
+        artworkCache.removeValue(forKey: path)
+        lyricsCache.removeValue(forKey: path)
     }
 
     func artwork(for track: Track) -> UIImage? { artworkCache[track.path] }

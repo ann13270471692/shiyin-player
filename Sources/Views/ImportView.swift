@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ImportView: View {
     @StateObject private var browser = SyncBrowser()
-    @StateObject private var downloader = SyncDownloader()
+    @EnvironmentObject var downloader: SyncDownloader
     @EnvironmentObject var library: LibraryStore
     @State private var selected: Set<String> = []
     @State private var hint: String?
