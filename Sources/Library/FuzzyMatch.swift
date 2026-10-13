@@ -81,22 +81,39 @@ enum FuzzyMatch {
         let ini = initials(base)
         let full = pinyinFull(base)
         if ini.contains(needle) || full.contains(needle) { return 2 }
-        if needle.count >= 2
-            && (subseq(needle, hay) || subseq(needle, ini) || subseq(needle, full)) { return 1 }
+        // 跳字只按拼音判定：太短的查询走跳字会把无关长文件名捞进来
+        if needle.count >= 3 && (subseq(needle, ini) || subseq(needle, full)) { return 1 }
         return 0
+    }
+
+    /// 「 - 」分隔的最后一段视为歌名；歌名里命中的排在前面
+    private static func titlePart(_ name: String) -> String {
+        let base = name.replacingOccurrences(of: "\\.(mp3|lrc|jpg|png|txt)$",
+                                             with: "", options: .regularExpression)
+        if let r = base.range(of: " - ", options: .backwards) {
+            return String(base[r.upperBound...])
+        }
+        return base
     }
 
     static func filter<T>(_ items: [T], name: (T) -> String, _ q: String) -> [T] {
         let needle = compact(q)
         if needle.isEmpty { return items }
-        var scored: [(Int, String, T)] = []
+        var scored: [(Int, Int, String, T)] = []
         scored.reserveCapacity(items.count)
         for it in items {
             let n = name(it)
             let s = score(n, q)
-            if s > 0 { scored.append((s, n, it)) }
+            if s > 0 {
+                scored.append((s, score(titlePart(n), q) > 0 ? 1 : 0, n, it))
+            }
         }
-        scored.sort { a, b in a.0 != b.0 ? a.0 > b.0 : a.1 < b.1 }
-        return scored.map { $0.2 }
+        // 匹配度 → 歌名是否命中 → 文件名
+        scored.sort { a, b in
+            if a.0 != b.0 { return a.0 > b.0 }
+            if a.1 != b.1 { return a.1 > b.1 }
+            return a.2 < b.2
+        }
+        return scored.map { $0.3 }
     }
 }
