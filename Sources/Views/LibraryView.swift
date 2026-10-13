@@ -60,37 +60,7 @@ struct LibraryView: View {
                         Button {
                             engine.playQueue(displayed, startAt: track)
                         } label: {
-                            HStack(spacing: 10) {
-                                if engine.current?.id == track.id {
-                                    Image(systemName: engine.isPlaying ? "waveform" : "music.note")
-                                        .font(.subheadline)
-                                        .foregroundStyle(Color.accentColor)
-                                        .symbolEffect(.variableColor.iterative,
-                                                     isActive: engine.isPlaying)
-                                } else {
-                                    Image(systemName: "music.note")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(track.title)
-                                        .font(.body)
-                                        .foregroundStyle(engine.current?.id == track.id
-                                                         ? Color.accentColor : Color.primary)
-                                    Text(track.artist)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 8)
-                                if track.hasLyrics {
-                                    Image(systemName: "text.bubble")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                Text(TimeFormat.seconds(track.duration))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
+                            rowLabel(track)
                         }
                         .buttonStyle(.plain)
                         // 长按走系统菜单：挂在 Button 上的 onLongPressGesture
@@ -158,6 +128,41 @@ struct LibraryView: View {
                     )
                 }
             }
+        }
+    }
+
+    // 行内容拆成独立函数：整个 body 太长会让类型检查超时
+    @ViewBuilder
+    private func rowLabel(_ track: Track) -> some View {
+        HStack(spacing: 10) {
+            if engine.current?.id == track.id {
+                Image(systemName: engine.isPlaying ? "waveform" : "music.note")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .symbolEffect(.variableColor.iterative, isActive: engine.isPlaying)
+            } else {
+                Image(systemName: "music.note")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.body)
+                    .foregroundStyle(engine.current?.id == track.id
+                                     ? Color.accentColor : Color.primary)
+                Text(track.artist)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if track.hasLyrics {
+                Image(systemName: "text.bubble")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(TimeFormat.seconds(track.duration))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
     }
 

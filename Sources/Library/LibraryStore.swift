@@ -48,7 +48,7 @@ final class LibraryStore: ObservableObject {
         // 避免「点了删除却没删掉」被当成成功
         if fm.fileExists(atPath: track.url.path) {
             throw NSError(domain: "Shiyin", code: 1,
-                          userInfo: [.localizedDescription: "文件仍存在，未能删除"])
+                          userInfo: [NSLocalizedDescriptionKey: "文件仍存在，未能删除"])
         }
         let lrc = track.url.deletingPathExtension().appendingPathExtension("lrc")
         if fm.fileExists(atPath: lrc.path) {
