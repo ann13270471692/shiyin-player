@@ -44,6 +44,12 @@ final class LibraryStore: ObservableObject {
     func deleteLocalCopy(of track: Track) throws {
         let fm = FileManager.default
         try fm.removeItem(at: track.url)
+        // removeItem 没报错但文件还在（只读卷、iCloud 占位符等）时明确报错，
+        // 避免「点了删除却没删掉」被当成成功
+        if fm.fileExists(atPath: track.url.path) {
+            throw NSError(domain: "Shiyin", code: 1,
+                          userInfo: [.localizedDescription: "文件仍存在，未能删除"])
+        }
         let lrc = track.url.deletingPathExtension().appendingPathExtension("lrc")
         if fm.fileExists(atPath: lrc.path) {
             try fm.removeItem(at: lrc)

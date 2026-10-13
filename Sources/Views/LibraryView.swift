@@ -93,15 +93,25 @@ struct LibraryView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .onLongPressGesture(minimumDuration: 0.4) {
-                            // 长按：弹出「从手机删除」确认对话框
-                            trackToDelete = track
-                            showDeleteConfirm = true
+                        // 长按走系统菜单：挂在 Button 上的 onLongPressGesture
+                        // 会被 Button 自身的点击手势吃掉，长按根本不触发
+                        .contextMenu {
+                            Button {
+                                askDelete(track)
+                            } label: {
+                                Label("从手机删除", systemImage: "trash")
+                            }
+                        }
+                    } onDelete: { indexes in
+                        // 左滑删除：同样只删手机副本，且要经过确认
+                        let items = displayed
+                        if let i = indexes.first, i < items.count {
+                            askDelete(items[i])
                         }
                     }
                 } header: {
                     if !displayed.isEmpty {
-                        Text("长按歌曲可删除（只删手机副本）")
+                        Text("长按或左滑歌曲可删除（只删手机副本）")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -152,6 +162,11 @@ struct LibraryView: View {
     }
 
     // MARK: - 删除手机副本
+
+    private func askDelete(_ track: Track) {
+        trackToDelete = track
+        showDeleteConfirm = true
+    }
 
     private func delete(_ track: Track) {
         // 正在播放的正是它：先停止播放、清空「正在播放」状态，再删文件
