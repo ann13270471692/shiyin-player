@@ -82,7 +82,8 @@ struct LibraryView: View {
             Section {
                 ForEach(displayed) { track in
                     rowButton(track)
-                } onDelete: { indexes in
+                }
+                .onDelete { indexes in
                     // 左滑删除：同样只删手机副本，且要经过确认
                     let items = displayed
                     if let i = indexes.first, i < items.count {
