@@ -1,4 +1,4 @@
-﻿name: Shiyin
+name: Shiyin
 options:
   bundleIdPrefix: com.shiyin
   deploymentTarget:
@@ -23,7 +23,7 @@ targets:
     info:
       path: .generated/Info.plist
       properties:
-        CFBundleDisplayName: 姊︾闊充箰
+        CFBundleDisplayName: 梦秋音乐
         CFBundleName: Shiyin
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -35,7 +35,8 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
-        NSLocalNetworkUsageDescription: 鎷鹃煶闇€瑕佸湪灞€鍩熺綉鍐呭彂鐜颁綘鐨勭數鑴戯紝浠ヤ笅杞介煶涔愭枃浠跺埌鎵嬫満銆?        NSBonjourServices:
+        NSLocalNetworkUsageDescription: 拾音需要在局域网内发现你的电脑，以下载音乐文件到手机。
+        NSBonjourServices:
           - _shiyin._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
