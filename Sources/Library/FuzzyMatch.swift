@@ -46,6 +46,20 @@ enum FuzzyMatch {
         return out
     }
 
+    private static var pinyinCache: [String: String] = [:]
+
+    /// 汉字全拼连写（晴天 → qingtian），字母数字原样保留
+    static func pinyinFull(_ s: String) -> String {
+        if let hit = pinyinCache[s] { return hit }
+        var t = s.applyingTransform(pinyinTransform, reverse: false) ?? s
+        t = t.applyingTransform(StringTransform(rawValue: "Strip Combination Marks"),
+                                reverse: false) ?? t
+        let out = compact(t)
+        if pinyinCache.count > 4000 { pinyinCache.removeAll() }
+        pinyinCache[s] = out
+        return out
+    }
+
     private static func subseq(_ needle: String, _ hay: String) -> Bool {
         let n = Array(needle), h = Array(hay)
         var p = 0
@@ -56,7 +70,7 @@ enum FuzzyMatch {
         return p == n.count
     }
 
-    /// 3=原文包含 2=拼音首字母包含 1=跳字命中 0=不匹配
+    /// 3=原文包含 2=拼音（首字母或全拼）包含 1=跳字命中 0=不匹配
     static func score(_ name: String, _ q: String) -> Int {
         let needle = compact(q)
         if needle.isEmpty { return 3 }
@@ -65,8 +79,10 @@ enum FuzzyMatch {
         let hay = compact(base)
         if hay.contains(needle) { return 3 }
         let ini = initials(base)
-        if ini.contains(needle) { return 2 }
-        if needle.count >= 2 && (subseq(needle, hay) || subseq(needle, ini)) { return 1 }
+        let full = pinyinFull(base)
+        if ini.contains(needle) || full.contains(needle) { return 2 }
+        if needle.count >= 2
+            && (subseq(needle, hay) || subseq(needle, ini) || subseq(needle, full)) { return 1 }
         return 0
     }
 
