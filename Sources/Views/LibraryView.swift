@@ -54,80 +54,100 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    ForEach(displayed) { track in
-                        Button {
-                            engine.playQueue(displayed, startAt: track)
-                        } label: {
-                            rowLabel(track)
-                        }
-                        .buttonStyle(.plain)
-                        // 长按走系统菜单：挂在 Button 上的 onLongPressGesture
-                        // 会被 Button 自身的点击手势吃掉，长按根本不触发
-                        .contextMenu {
-                            Button {
-                                askDelete(track)
-                            } label: {
-                                Label("从手机删除", systemImage: "trash")
-                            }
-                        }
-                    } onDelete: { indexes in
-                        // 左滑删除：同样只删手机副本，且要经过确认
-                        let items = displayed
-                        if let i = indexes.first, i < items.count {
-                            askDelete(items[i])
-                        }
+            tracksList
+                .navigationTitle("曲库（\(library.tracks.count)）")
+                .searchable(text: $search, prompt: "搜索歌名 / 歌手")
+                .toolbar { sortToolbar }
+                .refreshable { library.refresh() }
+                .confirmationDialog("从手机删除", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                    Button("删除", role: .destructive) {
+                        if let t = trackToDelete { delete(t) }
                     }
-                } header: {
-                    if !displayed.isEmpty {
-                        Text("长按或左滑歌曲可删除（只删手机副本）")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    deleteMessage
                 }
-            }
-            .navigationTitle("曲库（\(library.tracks.count)）")
-            .searchable(text: $search, prompt: "搜索歌名 / 歌手")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("排序", selection: $sortKeyRaw) {
-                            ForEach(SortKey.allCases) { k in
-                                Text(k.rawValue).tag(k.rawValue)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
+                .alert("删除失败", isPresented: $showDeleteError, presenting: deleteError) { _ in
+                    Button("好", role: .cancel) {}
+                } message: { msg in
+                    Text(msg)
+                }
+                .overlay { emptyOverlay }
+        }
+    }
+
+    // body 拆成几块：整个 body 写在一起会让类型检查超时
+    private var tracksList: some View {
+        List {
+            Section {
+                ForEach(displayed) { track in
+                    rowButton(track)
+                } onDelete: { indexes in
+                    // 左滑删除：同样只删手机副本，且要经过确认
+                    let items = displayed
+                    if let i = indexes.first, i < items.count {
+                        askDelete(items[i])
                     }
                 }
-            }
-            .refreshable { library.refresh() }
-            .confirmationDialog("从手机删除", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("删除", role: .destructive) {
-                    if let t = trackToDelete { delete(t) }
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                if let t = trackToDelete {
-                    Text("\(t.title) — \(t.artist)")
-                    Text("只删除手机上已下载的副本，电脑上的文件不受影响")
+            } header: {
+                if !displayed.isEmpty {
+                    Text("长按或左滑歌曲可删除（只删手机副本）")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .alert("删除失败", isPresented: $showDeleteError, presenting: deleteError) { _ in
-                Button("好", role: .cancel) {}
-            } message: { msg in
-                Text(msg)
+        }
+    }
+
+    private func rowButton(_ track: Track) -> some View {
+        Button {
+            engine.playQueue(displayed, startAt: track)
+        } label: {
+            rowLabel(track)
+        }
+        .buttonStyle(.plain)
+        // 长按走系统菜单：挂在 Button 上的 onLongPressGesture
+        // 会被 Button 自身的点击手势吃掉，长按根本不触发
+        .contextMenu {
+            Button {
+                askDelete(track)
+            } label: {
+                Label("从手机删除", systemImage: "trash")
             }
-            .overlay {
-                if library.tracks.isEmpty {
-                    ContentUnavailableView(
-                        "还没有音乐",
-                        systemImage: "music.note",
-                        description: Text("用「导入」页从电脑拉取，或用数据线经 iTunes / Apple 设备把 MP3 放入 Music 文件夹")
-                    )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var sortToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Picker("排序", selection: $sortKeyRaw) {
+                    ForEach(SortKey.allCases) { k in
+                        Text(k.rawValue).tag(k.rawValue)
+                    }
                 }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
             }
+        }
+    }
+
+    @ViewBuilder
+    private var deleteMessage: some View {
+        if let t = trackToDelete {
+            Text("\(t.title) — \(t.artist)")
+            Text("只删除手机上已下载的副本，电脑上的文件不受影响")
+        }
+    }
+
+    @ViewBuilder
+    private var emptyOverlay: some View {
+        if library.tracks.isEmpty {
+            ContentUnavailableView(
+                "还没有音乐",
+                systemImage: "music.note",
+                description: Text("用「导入」页从电脑拉取，或用数据线经 iTunes / Apple 设备把 MP3 放入 Music 文件夹")
+            )
         }
     }
 
