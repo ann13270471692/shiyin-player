@@ -22,6 +22,9 @@ final class PlayerEngine: ObservableObject {
     }
     /// 当前输出通路的延迟（秒）。蓝牙耳机可达 0.15–0.3s，外放约 0.01s。
     @Published private(set) var outputLatency: Double = 0
+    /// 当前歌曲的歌词偏移（毫秒）：正值 = 歌词提前显示，负值 = 延后。
+    /// 按歌曲存档在 lyricAdj（以文件名为键），行为与鸿蒙版一致。
+    @Published var lyricAdjMs: Double = 0
 
     // 墙钟插值：AVPlayer 的观察者 0.1s 才回一次，中间用墙钟补齐，
     // 做法和鸿蒙版一致，避免歌词比声音慢半拍。
@@ -57,16 +60,19 @@ final class PlayerEngine: ObservableObject {
     private var orderPos = 0
     private var timeToken: Any?
     private var positionByPath: [String: Double] = [:]
+    private var lyricAdjByFile: [String: Double] = [:]
     private var artworkCache: [String: UIImage] = [:]
     private var lyricsCache: [String: String] = [:]
     private let posKey = "resumePositions"
     private let shuffleKey = "play.shuffle"
     private let repeatKey = "play.repeatMode"
+    private let lyricAdjKey = "lyricAdj"
 
     private init() {
         // 旧版本的手动歌词偏移已移除，清掉存档避免残留值继续影响对齐
         UserDefaults.standard.removeObject(forKey: "lyricOffsetMs")
         positionByPath = (UserDefaults.standard.dictionary(forKey: posKey) as? [String: Double]) ?? [:]
+        lyricAdjByFile = (UserDefaults.standard.dictionary(forKey: lyricAdjKey) as? [String: Double]) ?? [:]
         // 恢复上次退出前的随机 / 循环模式（init 里赋值不触发 didSet，不会多余回写）
         shuffle = UserDefaults.standard.bool(forKey: shuffleKey)
         repeatMode = RepeatMode(rawValue: UserDefaults.standard.integer(forKey: repeatKey)) ?? .off
@@ -159,6 +165,21 @@ final class PlayerEngine: ObservableObject {
         repeatMode = RepeatMode(rawValue: (repeatMode.rawValue + 1) % 3) ?? .off
     }
 
+    /// 某首歌已存档的歌词偏移（毫秒），以文件名为键
+    func lyricAdj(for track: Track) -> Double {
+        lyricAdjByFile[track.url.lastPathComponent] ?? 0
+    }
+
+    /// 调整当前正在播放歌曲的歌词偏移（限制在 ±10000 ms 内），并立即持久化
+    func bumpLyricAdj(_ delta: Double) {
+        guard let cur = current else { return }
+        var ms = lyricAdjMs + delta
+        if ms > 10_000 { ms = 10_000 }
+        if ms < -10_000 { ms = -10_000 }
+        lyricAdjMs = ms
+        saveLyricAdj(for: cur, ms: ms)
+    }
+
     /// 停止播放并清空「正在播放」状态（删除当前曲目时先调用，再删文件）
     func stopAndClear() {
         savePosition()
@@ -216,6 +237,8 @@ final class PlayerEngine: ObservableObject {
         guard queue.indices.contains(qi) else { return }
         let track = queue[qi]
         current = track
+        // 切歌时载入该曲已存档的歌词偏移（鸿蒙版同款行为）
+        lyricAdjMs = lyricAdj(for: track)
         let item = AVPlayerItem(url: track.url)
         player.replaceCurrentItem(with: item)
         duration = 0
@@ -283,6 +306,12 @@ final class PlayerEngine: ObservableObject {
         guard t.isFinite, t > 0 else { return }
         positionByPath[cur.path] = t
         UserDefaults.standard.set(positionByPath, forKey: posKey)
+    }
+
+    private func saveLyricAdj(for track: Track, ms: Double) {
+        lyricAdjByFile[track.url.lastPathComponent] = ms
+        UserDefaults.standard.set(lyricAdjByFile, forKey: lyricAdjKey)
+        UserDefaults.standard.synchronize()
     }
 
     private func updateNowPlaying() {

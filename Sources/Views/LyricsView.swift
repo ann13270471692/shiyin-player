@@ -25,61 +25,65 @@ struct LyricsView: View {
                 }
                 .frame(maxWidth: .infinity)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 14) {
-                            ForEach(Array(lines.enumerated()), id: \.element.id) { i, line in
-                                Text(line.text)
-                                    .font(i == currentIdx ? .title3.bold() : .body)
-                                    .foregroundStyle(i == currentIdx ? Color.primary : Color.secondary.opacity(0.5))
-                                    .multilineTextAlignment(.center)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 4)
-                                    .id(i)
-                                    .onTapGesture { engine.seek(to: line.time) }
-                            }
-                            Color.clear.frame(height: 100)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 100)
-                    }                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 12)
-                            .onChanged { _ in
-                                manualUntil = Date().addingTimeInterval(4)
-                            }
-                    )
-                    .onChange(of: currentIdx) { _, new in
-                        guard new >= 0, Date() >= manualUntil else { return }
-                        let fast = Date().timeIntervalSince(lastIdxChange) < 0.8
-                        lastIdxChange = Date()
-                        if fast {
-                            // 快嘴段落：行距太近，排队动画会连成整页滚动，直接对齐
-                            proxy.scrollTo(new, anchor: .center)
-                        } else {
-                            withAnimation(.smooth(duration: 0.35)) {
-                                proxy.scrollTo(new, anchor: .center)
-                            }
-                        }
-                    }
-                    .overlay(alignment: .bottom) {
-                        if Date() < manualUntil {
-                            Button {
-                                manualUntil = .distantPast
-                                if currentIdx >= 0 {
-                                    withAnimation(.easeOut(duration: 0.3)) {
-                                        proxy.scrollTo(currentIdx, anchor: .center)
-                                    }
+                VStack(spacing: 8) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 14) {
+                                ForEach(Array(lines.enumerated()), id: \.element.id) { i, line in
+                                    Text(line.text)
+                                        .font(i == currentIdx ? .title3.bold() : .body)
+                                        .foregroundStyle(i == currentIdx ? Color.primary : Color.secondary.opacity(0.5))
+                                        .multilineTextAlignment(.center)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 4)
+                                        .id(i)
+                                        .onTapGesture { engine.seek(to: line.time) }
                                 }
-                            } label: {
-                                Image(systemName: "location")
-                                    .font(.body)
-                                    .padding(11)
-                                    .background(.thinMaterial, in: Circle())
-                                    .shadow(radius: 3)
+                                Color.clear.frame(height: 100)
                             }
-                            .padding(.bottom, 10)
+                            .padding(.horizontal)
+                            .padding(.top, 100)
+                        }
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 12)
+                                .onChanged { _ in
+                                    manualUntil = Date().addingTimeInterval(4)
+                                }
+                        )
+                        .onChange(of: currentIdx) { _, new in
+                            guard new >= 0, Date() >= manualUntil else { return }
+                            let fast = Date().timeIntervalSince(lastIdxChange) < 0.8
+                            lastIdxChange = Date()
+                            if fast {
+                                // 快嘴段落：行距太近，排队动画会连成整页滚动，直接对齐
+                                proxy.scrollTo(new, anchor: .center)
+                            } else {
+                                withAnimation(.smooth(duration: 0.35)) {
+                                    proxy.scrollTo(new, anchor: .center)
+                                }
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            if Date() < manualUntil {
+                                Button {
+                                    manualUntil = .distantPast
+                                    if currentIdx >= 0 {
+                                        withAnimation(.easeOut(duration: 0.3)) {
+                                            proxy.scrollTo(currentIdx, anchor: .center)
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "location")
+                                        .font(.body)
+                                        .padding(11)
+                                        .background(.thinMaterial, in: Circle())
+                                        .shadow(radius: 3)
+                                }
+                                .padding(.bottom, 10)
+                            }
                         }
                     }
+                    lyricAdjustBar
                 }
             }
         }
@@ -93,9 +97,54 @@ struct LyricsView: View {
         .onChange(of: engine.outputLatency) { _, _ in
             updateIndex(at: engine.currentTime)
         }
+        .onChange(of: engine.lyricAdjMs) { _, _ in
+            updateIndex(at: engine.currentTime)
+        }
         .onReceive(Self.heartbeat) { _ in
             if !lines.isEmpty { updateIndex(at: engine.currentTime) }
         }
+    }
+
+    /// 每首歌各自的歌词偏移控件（与鸿蒙版一致）：左「晚」、右「早」，各 0.5 秒一步，
+    /// 抽成独立 computed subview，避免 body 过大触发类型检查超时
+    private var lyricAdjustBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                engine.bumpLyricAdj(-500)
+            } label: {
+                Text("歌词晚 0.5 秒")
+                    .font(.footnote.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.thinMaterial, in: Capsule())
+            }
+            Spacer(minLength: 4)
+            Text(lyricAdjLabel)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Spacer(minLength: 4)
+            Button {
+                engine.bumpLyricAdj(500)
+            } label: {
+                Text("歌词早 0.5 秒")
+                    .font(.footnote.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.thinMaterial, in: Capsule())
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .padding(.horizontal)
+        .padding(.bottom, 6)
+    }
+
+    private var lyricAdjLabel: String {
+        let ms = engine.lyricAdjMs
+        if ms == 0 { return "歌词已对齐" }
+        if ms > 0 { return String(format: "提前 %.1f 秒", ms / 1000) }
+        return String(format: "延后 %.1f 秒", -ms / 1000)
     }
 
     private func loadLyrics() async {
@@ -137,7 +186,10 @@ struct LyricsView: View {
 
     private func updateIndex(at t: Double) {
         guard !lines.isEmpty else { return }
-        let pos = engine.lyricPosition
+        // 加上每首歌各自的歌词偏移：正值 lyricAdjMs = 歌词提前显示。
+        // 等价于鸿蒙版的 currentTime * 1000 + lyricAdjMs 与 line.time * 1000 比较
+        //（这里 line.time 与 lyricPosition 都是秒，outputLatency 补偿保持原样）。
+        let pos = max(0, engine.lyricPosition + engine.lyricAdjMs / 1000)
         var idx = -1
         for (i, line) in lines.enumerated() {
             if line.time > pos { break }

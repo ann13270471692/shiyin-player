@@ -9,11 +9,22 @@ struct LyricLine: Identifiable, Hashable {
 enum LRCParser {
     private static let tagRegex = try? NSRegularExpression(
         pattern: "\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?\\]")
+    // [offset:+500] 之类的全局偏移标签（毫秒）：以前被丢掉，
+    // 带这种标签的歌词会整体错位
+    private static let offsetRegex = try? NSRegularExpression(
+        pattern: "\\[offset:\\s*([+-]?\\d+)\\s*\\]")
 
     static func parse(_ raw: String) -> [LyricLine] {
         guard let regex = tagRegex else { return [] }
         var result: [LyricLine] = []
         var id = 0
+
+        var offset = 0.0
+        if let ore = offsetRegex,
+           let om = ore.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+           let vr = Range(om.range(at: 1), in: raw) {
+            offset = (Double(raw[vr]) ?? 0) / 1000.0
+        }
 
         for rawLine in raw.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
             let line = String(rawLine)
@@ -34,7 +45,7 @@ enum LRCParser {
                     let digits = String(line[fracR])
                     frac = (Double(digits) ?? 0) / pow(10.0, Double(digits.count))
                 }
-                times.append(minutes * 60 + seconds + frac)
+                times.append(max(0, minutes * 60 + seconds + frac + offset))
             }
 
             var text = line
