@@ -7,7 +7,9 @@ struct ImportView: View {
     @State private var selected: Set<String> = []
     @State private var hint: String?
     @State private var lastServer: SyncServer?
+    @State private var query: String = ""
     @FocusState private var ipFocused: Bool
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -18,6 +20,7 @@ struct ImportView: View {
                 // 中间：选择与下载按钮（放在 List 外面，
                 // List 的行级手势会吞掉行内裸文字按钮的点击）
                 if !downloader.remoteFiles.isEmpty {
+                    searchBar
                     actionBar
                 }
 
@@ -26,16 +29,20 @@ struct ImportView: View {
                 // 底部：文件列表（只有它是滚动视图，底部安全区留给标签栏）
                 List {
                     Section {
-                        ForEach(downloader.remoteFiles) { f in
+                        ForEach(visibleFiles) { f in
                             row(f)
                         }
                     } header: {
                         if !downloader.remoteFiles.isEmpty {
-                            Text("音乐集合（\(downloader.remoteFiles.count) 个文件）")
+                            Text(query.isEmpty
+                                 ? "音乐集合（\(downloader.remoteFiles.count) 个文件）"
+                                 : "匹配 \(visibleFiles.count) / 共 \(downloader.remoteFiles.count) 个文件")
                         }
                     } footer: {
                         if downloader.remoteFiles.isEmpty {
                             Text("连上电脑后这里会列出全部文件。")
+                        } else if visibleFiles.isEmpty {
+                            Text("没有匹配「\(query)」的文件。可以只输入歌名的一部分，或试拼音首字母（如 qt = 晴天）。")
                         }
                     }
 
@@ -58,7 +65,7 @@ struct ImportView: View {
                     Spacer()
                     Button("连接") { connectManual() }
                         .fontWeight(.semibold)
-                    Button("完成") { ipFocused = false }
+                    Button("完成") { ipFocused = false; searchFocused = false }
                 }
             }
             .onAppear {
@@ -72,6 +79,41 @@ struct ImportView: View {
     private var isFailed: Bool {
         if case .failed = downloader.state { return true }
         return false
+    }
+
+    /// 按模糊查找过滤后的可见列表（匹配度高的排前面）
+    private var visibleFiles: [RemoteFile] {
+        FuzzyMatch.filter(downloader.remoteFiles, name: { $0.name }, query)
+    }
+
+    // MARK: - 模糊查找
+
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+            TextField("模糊查找：歌名 / 歌手 / 拼音（如 qt）", text: $query)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($searchFocused)
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 17))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
     }
 
     // MARK: - 顶部：发现的电脑
@@ -260,7 +302,8 @@ struct ImportView: View {
     private func selectStale() {
         downloader.rescanLocal()
         var n = 0
-        for f in downloader.remoteFiles
+        // 有搜索词时只作用于匹配到的文件：搜一个词→全选待更新→下载
+        for f in visibleFiles
         where !downloader.localNames.contains(f.name)
             || downloader.staleNames.contains(f.name) {
             selected.insert(f.name)
@@ -272,8 +315,9 @@ struct ImportView: View {
     }
 
     private func selectAll() {
-        for f in downloader.remoteFiles { selected.insert(f.name) }
-        hint = "已全选 \(downloader.remoteFiles.count) 个文件，点「下载所选」重新拉取"
+        let files = visibleFiles
+        for f in files { selected.insert(f.name) }
+        hint = "已全选 \(files.count) 个文件，点「下载所选」重新拉取"
     }
 
     private func downloadOrStop() {
