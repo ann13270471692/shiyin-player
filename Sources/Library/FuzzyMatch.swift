@@ -4,6 +4,8 @@ import Foundation
 /// 「晴天」「qt」「qing」「2019」都能命中「2019-012 - 周杰伦 - 晴天.mp3」。
 enum FuzzyMatch {
     private static var charInitial: [Character: String] = [:]
+    /// Han → 汉语拼音（CoreFoundation 内置转换；用 rawValue 避免 SDK 常量名差异）
+    private static let pinyinTransform = StringTransform(rawValue: "Mandarin-Latin")
 
     /// 只留字母数字与汉字，去掉空格、连字符、扩展名等噪声
     static func compact(_ s: String) -> String {
@@ -26,9 +28,10 @@ enum FuzzyMatch {
                     out += hit
                     continue
                 }
-                var py = String(ch).applyingTransform(StringTransform.hansToHanyuPinyin,
+                var py = String(ch).applyingTransform(Self.pinyinTransform,
                                                        reverse: false) ?? String(ch)
-                py = py.applyingTransform(StringTransform.stripCombiningMarks, reverse: false) ?? py
+                py = py.applyingTransform(StringTransform(rawValue: "Strip Combination Marks"),
+                                          reverse: false) ?? py
                 var ini = ""
                 if let f = py.lowercased().unicodeScalars.first, f >= "a" && f <= "z" {
                     ini.unicodeScalars.append(f)
