@@ -127,6 +127,37 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_error(404)
 
+    def do_POST(self):
+        """手机把诊断日志推给电脑：POST /devlog，正文是日志文本。"""
+        path = unquote(self.path.split("?")[0])
+        if path != "/devlog":
+            self.send_error(404)
+            return
+        try:
+            n = min(int(self.headers.get("Content-Length") or 0), 4 << 20)
+        except ValueError:
+            n = 0
+        body = self.rfile.read(n) if n > 0 else b""
+        dev = re.sub(r"[^A-Za-z0-9._-]", "", self.headers.get("X-Device") or "device") or "device"
+        ver = re.sub(r"[^A-Za-z0-9._-]", "", self.headers.get("X-App-Version") or "")
+        d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devlog")
+        os.makedirs(d, exist_ok=True)
+        import time
+        fn = os.path.join(d, "%s%s-%s.txt" % (dev, ("-v" + ver) if ver else "",
+                                              time.strftime("%Y%m%d-%H%M%S")))
+        with open(fn, "wb") as f:
+            f.write(body)
+        print("收到诊断日志: %s (%d 字节)" % (fn, len(body)), flush=True)
+        out = json.dumps({"ok": True, "bytes": len(body)}, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        try:
+            self.wfile.write(out)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
 
 def get_local_ip():
     # 优先选「默认路由网关与本机 IP 同网段」的物理网卡（避开 VPN/虚拟网卡劫持），

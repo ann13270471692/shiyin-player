@@ -166,6 +166,8 @@ struct ImportView: View {
                     .buttonStyle(.bordered)
                 Button("换电脑") { showServers = true }
                     .buttonStyle(.bordered)
+                Button("诊断") { sendDiag() }
+                    .buttonStyle(.bordered)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -453,6 +455,14 @@ struct ImportView: View {
                            port: 8450, displayName: host)
         browser.addManual(s)
         load(s)
+    }
+
+    private func sendDiag() {
+        guard let s = lastServer else { hint = "先连上电脑，再点诊断发送日志"; return }
+        DebugLog.shared.log("user tap 诊断")
+        let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        DebugLog.shared.upload(server: s, device: ProcessInfo.processInfo.hostName, version: ver)
+        hint = "正在把诊断日志发到电脑…"
     }
 
     private func load(_ server: SyncServer) {

@@ -85,7 +85,9 @@ enum SongGroup {
             out.append(SongEntry(key: key, audio: a, lyric: l, size: a.size,
                                  stale: isStale, downloaded: isLocal,
                                  year: p.year, artist: p.artist, title: p.title,
-                                 movie: p.movie, movieName: a.movie ?? "",
+                                 // 文件名没写【影视】，但服务器剧名表认它是影视金曲的，也算影视
+                                 movie: p.movie || !(a.movie ?? "").isEmpty,
+                                 movieName: a.movie ?? "",
                                  artistPy: FuzzyMatch.pinyinFull(p.artist)))
         }
         return out

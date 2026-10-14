@@ -129,9 +129,11 @@ final class SyncDownloader: ObservableObject {
               let (data, _) = try? await session.data(from: url),
               let m = try? JSONDecoder().decode(Manifest.self, from: data)
         else {
+            DebugLog.shared.log("manifest FAIL \(server.host):\(server.port)")
             state = .failed("无法读取文件列表：检查服务器是否在运行、IP 是否正确")
             return
         }
+        DebugLog.shared.log("manifest ok \(m.files.count) files")
         remoteFiles = m.files
         rescanLocal()
         markStale(m.files)
@@ -170,10 +172,12 @@ final class SyncDownloader: ObservableObject {
     func download(_ files: [RemoteFile], from server: SyncServer) async {
         state = .running
         cancelRequested = false
+        DebugLog.shared.log("download begin n=\(files.count)")
         for f in files {
             if cancelRequested { break }
             await downloadOne(f, server: server)
         }
+        DebugLog.shared.log("download end cancelled=\(cancelRequested)")
         activeFile = nil
         state = cancelRequested ? .cancelled : .done
         markStale(remoteFiles)
@@ -192,6 +196,7 @@ final class SyncDownloader: ObservableObject {
             if stop { break }
             try? await Task.sleep(nanoseconds: UInt64(attempt) * 700_000_000)
         }
+        DebugLog.shared.log("dl FAIL \(f.name)")
         await MainActor.run {
             self.progress[f.name] = -1
             self.speedText[f.name] = nil
