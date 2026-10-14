@@ -126,7 +126,7 @@ struct ImportView: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
+                .font(.system(size: 17))
                 .foregroundStyle(.secondary)
             TextField("模糊查找：歌名 / 歌手 / 拼音（如 qt）", text: $query)
                 .textFieldStyle(.plain)
@@ -232,16 +232,16 @@ struct ImportView: View {
     private var sortBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text("排序").font(.caption).foregroundStyle(.tertiary)
+                Text("排序").font(.footnote).foregroundStyle(.tertiary)
                 ForEach(SongSort.allCases, id: \.self) { m in
                     Button {
                         setSort(m)
                     } label: {
                         Text(m.label)
-                            .font(.footnote.weight(.medium))
+                            .font(.subheadline.weight(.medium))
                             .foregroundStyle(sortMode == m ? Color.white : Color.primary)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 7)
                             .background(sortMode == m ? Color.orange : Color(.secondarySystemBackground),
                                         in: Capsule())
                             .overlay(Capsule().strokeBorder(
@@ -260,10 +260,9 @@ struct ImportView: View {
             Text(query.isEmpty
                  ? "共 \(songs.count) 首 · 已下载 \(dlCount) 首 · 已选 \(selected.count) 首"
                  : "匹配 \(visibleSongs.count) / 共 \(songs.count) 首 · 已选 \(selected.count) 首")
-                .font(.footnote)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
-            chip("全选待更新") { selectStale() }
             chip("全选") { selectAll() }
             chip("清空") {
                 selected = []
@@ -280,17 +279,17 @@ struct ImportView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if downloader.state == .running, let a = downloader.activeFile {
                     Text("正在下载：\(a)")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.orange)
                         .lineLimit(1)
                 } else if let h = hint {
                     Text(h)
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 } else {
                     Text("点一行选一首 · 没歌词的自动跳过")
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -299,7 +298,7 @@ struct ImportView: View {
                 downloadOrStop()
             } label: {
                 Text(downloader.state == .running ? "停止下载" : "下载 \(selected.count) 首")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.body.weight(.semibold))
                     .padding(.horizontal, 6)
             }
             .buttonStyle(.borderedProminent)
@@ -314,7 +313,7 @@ struct ImportView: View {
     private func chip(_ title: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.footnote.weight(.medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -343,54 +342,54 @@ struct ImportView: View {
             .buttonStyle(.plain)
 
             // 主行歌名，副行歌手 · 年份（影视金曲带标记）
-            VStack(alignment: .leading, spacing: 3) {
-                Text(s.title).font(.subheadline).lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(s.title).font(.body).lineLimit(1)
                 HStack(spacing: 6) {
                     Text(s.artist.isEmpty ? "未知歌手" : s.artist)
-                        .font(.caption2)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     if s.year > 0 {
-                        Text(String(s.year)).font(.caption2).foregroundStyle(.tertiary)
+                        Text(String(s.year)).font(.footnote).foregroundStyle(.tertiary)
                     }
                     if s.movie {
                         Text("影视")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.orange)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.15), in: Capsule())
                     }
                 }
                 if let p = songProgress(s) {
                     if p < 0 {
-                        Text("下载失败，已自动重试仍未成功——再点一次「下载所选」可续传")
-                            .font(.caption2).foregroundStyle(.red)
+                        Text("下载失败，已自动重试仍未成功——再点一次下载按钮可续传")
+                            .font(.caption).foregroundStyle(.red)
                     } else if p >= 1 {
-                        Text("完成").font(.caption2).foregroundStyle(.green)
+                        Text("完成").font(.caption).foregroundStyle(.green)
                     } else {
                         HStack(spacing: 6) {
                             ProgressView(value: p).progressViewStyle(.linear)
                             Text(String(format: "%.0f%%", p * 100))
-                                .font(.caption2).foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                         if let sp = songSpeed(s) {
-                            Text(sp).font(.caption2).foregroundStyle(.secondary)
+                            Text(sp).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             Spacer(minLength: 6)
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: 3) {
                 if s.stale {
-                    Text("需更新").font(.caption2).foregroundStyle(.orange)
+                    Text("需更新").font(.footnote).foregroundStyle(.orange)
                 } else if s.downloaded {
-                    Text("已下载").font(.caption2).foregroundStyle(.green)
+                    Text("已下载").font(.footnote).foregroundStyle(.green)
                 } else {
-                    Text("未下载").font(.caption2).foregroundStyle(.tertiary)
+                    Text("未下载").font(.footnote).foregroundStyle(.tertiary)
                 }
                 Text(String(format: "%.1f MB", Double(s.size) / 1_048_576))
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.tertiary)
             }
         }
@@ -417,24 +416,10 @@ struct ImportView: View {
 
     // MARK: - 动作
 
-    private func selectStale() {
-        downloader.rescanLocal()
-        rebuildSongs()
-        var n = 0
-        // 有搜索词时只作用于匹配到的歌：搜一个词→全选待更新→下载
-        for s in visibleSongs where !s.downloaded || s.stale {
-            selected.insert(s.key)
-            n += 1
-        }
-        hint = n == 0
-            ? "没有检测到需要更新的歌。想强制重新拉取：点「全选」再下载"
-            : "已选中 \(n) 首未下载或电脑上改过的歌"
-    }
-
     private func selectAll() {
         let list = visibleSongs
         for s in list { selected.insert(s.key) }
-        hint = "已全选 \(list.count) 首（歌词一并拉取），点「下载所选」重新下载"
+        hint = "已选中 \(list.count) 首（歌词一并拉取），点「下载 \(list.count) 首」开始"
     }
 
     private func downloadOrStop() {
