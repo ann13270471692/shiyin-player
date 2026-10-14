@@ -21,32 +21,29 @@ struct SongEntry: Identifiable, Hashable {
     var id: String { key }
 }
 
+/// 排序方式（「已下载 / 未下载」已去掉：想看哪一类用下面的「只看」筛选，不重复）
 enum SongSort: Int, CaseIterable {
-    case downloadedFirst      // 默认：已下载排在最前
-    case undownloadedFirst    // 没下的排最前，方便找要拉的歌
-    case deletedFirst         // 手机上删过的排最前，方便看删了哪些 / 要不要拉回来
     case year
     case artist
     case movie                // 影视金曲排最前
+    case deletedFirst         // 手机上删过的排最前，方便看删了哪些 / 要不要拉回来
 
     var label: String {
         switch self {
-        case .downloadedFirst: return "已下载"
-        case .undownloadedFirst: return "未下载"
-        case .deletedFirst: return "已删除"
         case .year: return "年份"
         case .artist: return "歌手"
         case .movie: return "影视"
+        case .deletedFirst: return "已删除"
         }
     }
 }
 
-/// 只看某一类：全部 / 影视金曲 / 手机上删过的 / 还没下的
+/// 只看某一类：全部 / 影视金曲 / 还没下的 / 手机上删过的
 enum SongFilter: Int, CaseIterable {
     case all
     case movie
-    case deleted
     case undownloaded
+    case deleted
 
     var label: String {
         switch self {
@@ -121,10 +118,6 @@ enum SongGroup {
     static func sort(_ list: inout [SongEntry], _ mode: SongSort) {
         list.sort { x, y in
             switch mode {
-            case .downloadedFirst:
-                if x.downloaded != y.downloaded { return x.downloaded }
-            case .undownloadedFirst:
-                if x.downloaded != y.downloaded { return !x.downloaded }
             case .deletedFirst:
                 if x.deleted != y.deleted { return x.deleted }
             case .year:

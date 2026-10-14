@@ -8,7 +8,7 @@ struct ImportView: View {
     // 列表按「一首歌」一行显示：mp3 与歌词合并，选一次两个都拉
     @State private var songs: [SongEntry] = []
     // 排序：默认已下载优先，可切 没下的优先 / 年份 / 歌手 / 影视
-    @State private var sortMode: SongSort = .downloadedFirst
+    @State private var sortMode: SongSort = .year
     // 只看某一类：全部 / 只看影视 / 只看已删除 / 只看未下载
     @State private var filterMode: SongFilter = .all
     // 连上以后把服务器卡片收起，位置留给歌曲列表；点「换电脑」再展开
@@ -34,8 +34,7 @@ struct ImportView: View {
                 // List 的行级手势会吞掉行内裸文字按钮的点击）
                 if !downloader.remoteFiles.isEmpty {
                     searchBar
-                    sortBar
-                    filterBar
+                    chipBar
                     actionBar
                 }
 
@@ -257,36 +256,9 @@ struct ImportView: View {
 
     // MARK: - 中间：排序 / 选择 / 底部下载条
 
-    private var sortBar: some View {
+    private var chipBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text("排序").font(.footnote).foregroundStyle(.tertiary)
-                ForEach(SongSort.allCases, id: \.self) { m in
-                    Button {
-                        setSort(m)
-                    } label: {
-                        Text(m.label)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(sortMode == m ? Color.white : Color.primary)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 7)
-                            .background(sortMode == m ? Color.orange : Color(.secondarySystemBackground),
-                                        in: Capsule())
-                            .overlay(Capsule().strokeBorder(
-                                sortMode == m ? Color.orange : Color(.systemGray4), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-        }
-    }
-
-    private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Text("只看").font(.footnote).foregroundStyle(.tertiary)
                 ForEach(SongFilter.allCases, id: \.self) { f in
                     Button {
                         filterMode = f
@@ -302,6 +274,23 @@ struct ImportView: View {
                                         in: Capsule())
                             .overlay(Capsule().strokeBorder(
                                 filterMode == f ? Color.blue : Color(.systemGray4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Divider().frame(height: 18)
+                ForEach(SongSort.allCases, id: \.self) { m in
+                    Button {
+                        setSort(m)
+                    } label: {
+                        Text(m.label)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(sortMode == m ? Color.white : Color.primary)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 7)
+                            .background(sortMode == m ? Color.orange : Color(.secondarySystemBackground),
+                                        in: Capsule())
+                            .overlay(Capsule().strokeBorder(
+                                sortMode == m ? Color.orange : Color(.systemGray4), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
