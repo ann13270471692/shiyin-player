@@ -7,6 +7,11 @@ struct ImportView: View {
     @State private var selected: Set<String> = []
     // 列表按「一首歌」一行显示：mp3 与歌词合并，选一次两个都拉
     @State private var songs: [SongEntry] = []
+    // 排序：默认已下载优先，可切 没下的优先 / 年份 / 歌手 / 影视
+    @State private var sortMode: SongSort = .downloadedFirst
+    // 连上以后把服务器卡片收起，位置留给歌曲列表；点「换电脑」再展开
+    @State private var showServers: Bool = false
+    @State private var dlCount: Int = 0
     @State private var hint: String?
     @State private var lastServer: SyncServer?
     @State private var query: String = ""
@@ -23,6 +28,7 @@ struct ImportView: View {
                 // List 的行级手势会吞掉行内裸文字按钮的点击）
                 if !downloader.remoteFiles.isEmpty {
                     searchBar
+                    sortBar
                     actionBar
                 }
 
@@ -37,7 +43,7 @@ struct ImportView: View {
                     } header: {
                         if !downloader.remoteFiles.isEmpty {
                             Text(query.isEmpty
-                                 ? "音乐集合（\(songs.count) 首，每首含歌词）"
+                                 ? "排序：\(sortMode.label)"
                                  : "匹配 \(visibleSongs.count) / 共 \(songs.count) 首")
                         }
                     } footer: {
@@ -62,6 +68,11 @@ struct ImportView: View {
                 .onChange(of: downloader.remoteFiles) { _ in rebuildSongs() }
                 .onChange(of: downloader.staleNames) { _ in rebuildSongs() }
                 .onChange(of: downloader.localNames) { _ in rebuildSongs() }
+
+                // 底部固定操作条：拇指够得着，下载状态也在这里看
+                if !downloader.remoteFiles.isEmpty {
+                    bottomBar
+                }
             }
             .navigationTitle("导入")
             // 键盘上方一排「连接 / 完成」：键盘弹出时也能收起，
@@ -93,11 +104,21 @@ struct ImportView: View {
         FuzzyMatch.filter(songs, name: { $0.key }, query)
     }
 
-    /// 文件列表 -> 歌曲列表：mp3 与同名歌词合并成一行
+    /// 文件列表 -> 歌曲列表：mp3 与同名歌词合并成一行，再按当前方式排序
     private func rebuildSongs() {
-        songs = SongGroup.group(downloader.remoteFiles,
-                                local: downloader.localNames,
-                                stale: downloader.staleNames)
+        var list = SongGroup.group(downloader.remoteFiles,
+                                   local: downloader.localNames,
+                                   stale: downloader.staleNames)
+        SongGroup.sort(&list, sortMode)
+        songs = list
+        dlCount = list.reduce(0) { $0 + ($1.downloaded ? 1 : 0) }
+    }
+
+    private func setSort(_ mode: SongSort) {
+        sortMode = mode
+        var list = songs
+        SongGroup.sort(&list, mode)
+        songs = list
     }
 
     // MARK: - 模糊查找
@@ -132,7 +153,24 @@ struct ImportView: View {
 
     // MARK: - 顶部：发现的电脑
 
+    @ViewBuilder
     private var serverModule: some View {
+        if lastServer != nil && !isFailed && !showServers {
+            // 已连接：只留一行状态，位置让给歌曲列表
+            HStack(spacing: 10) {
+                Label("已连接 \(lastServer?.displayName ?? "")", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+                Spacer()
+                Button("刷新") { if let s = lastServer { load(s) } }
+                    .buttonStyle(.bordered)
+                Button("换电脑") { showServers = true }
+                    .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground))
+        } else {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("发现的电脑").font(.subheadline.weight(.semibold))
@@ -186,59 +224,91 @@ struct ImportView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(Color(.secondarySystemBackground))
+        }
     }
 
-    // MARK: - 中间：选择与下载
+    // MARK: - 中间：排序 / 选择 / 底部下载条
+
+    private var sortBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Text("排序").font(.caption).foregroundStyle(.tertiary)
+                ForEach(SongSort.allCases, id: \.self) { m in
+                    Button {
+                        setSort(m)
+                    } label: {
+                        Text(m.label)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(sortMode == m ? Color.white : Color.primary)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(sortMode == m ? Color.orange : Color(.secondarySystemBackground),
+                                        in: Capsule())
+                            .overlay(Capsule().strokeBorder(
+                                sortMode == m ? Color.orange : Color(.systemGray4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+    }
 
     private var actionBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                chip("全选待更新") { selectStale() }
-                chip("全选") { selectAll() }
-                chip("清空") {
-                    selected = []
-                    hint = nil
-                }
-                Spacer(minLength: 4)
-                Text("已选 \(selected.count) 首")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    if downloader.state == .running, let a = downloader.activeFile {
-                        Text("正在下载：\(a)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else if let h = hint {
-                        Text(h)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    } else {
-                        Text("点一行就选一首：mp3 和歌词一起下载，没歌词的自动跳过")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer(minLength: 6)
-                Button {
-                    downloadOrStop()
-                } label: {
-                    Text(downloader.state == .running ? "停止下载" : "下载所选（\(selected.count) 首）")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 4)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-                .controlSize(.large)
+        HStack(spacing: 8) {
+            Text(query.isEmpty
+                 ? "共 \(songs.count) 首 · 已下载 \(dlCount) 首 · 已选 \(selected.count) 首"
+                 : "匹配 \(visibleSongs.count) / 共 \(songs.count) 首 · 已选 \(selected.count) 首")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            chip("全选待更新") { selectStale() }
+            chip("全选") { selectAll() }
+            chip("清空") {
+                selected = []
+                hint = nil
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(Color(.systemBackground))
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                if downloader.state == .running, let a = downloader.activeFile {
+                    Text("正在下载：\(a)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                } else if let h = hint {
+                    Text(h)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else {
+                    Text("点一行选一首 · 没歌词的自动跳过")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: 6)
+            Button {
+                downloadOrStop()
+            } label: {
+                Text(downloader.state == .running ? "停止下载" : "下载 \(selected.count) 首")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+            .controlSize(.large)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 
     private func chip(_ title: String, _ action: @escaping () -> Void) -> some View {
@@ -272,8 +342,26 @@ struct ImportView: View {
             }
             .buttonStyle(.plain)
 
+            // 主行歌名，副行歌手 · 年份（影视金曲带标记）
             VStack(alignment: .leading, spacing: 3) {
-                Text(s.key).font(.caption).lineLimit(1)
+                Text(s.title).font(.subheadline).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(s.artist.isEmpty ? "未知歌手" : s.artist)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if s.year > 0 {
+                        Text(String(s.year)).font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    if s.movie {
+                        Text("影视")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.orange.opacity(0.15), in: Capsule())
+                    }
+                }
                 if let p = songProgress(s) {
                     if p < 0 {
                         Text("下载失败，已自动重试仍未成功——再点一次「下载所选」可续传")
@@ -292,14 +380,18 @@ struct ImportView: View {
                     }
                 }
             }
-            Spacer()
-            if s.stale {
-                Text("需更新").font(.caption2).foregroundStyle(.orange)
-            } else if s.downloaded {
-                Text("已下载").font(.caption2).foregroundStyle(.green)
-            } else {
+            Spacer(minLength: 6)
+            VStack(alignment: .trailing, spacing: 2) {
+                if s.stale {
+                    Text("需更新").font(.caption2).foregroundStyle(.orange)
+                } else if s.downloaded {
+                    Text("已下载").font(.caption2).foregroundStyle(.green)
+                } else {
+                    Text("未下载").font(.caption2).foregroundStyle(.tertiary)
+                }
                 Text(String(format: "%.1f MB", Double(s.size) / 1_048_576))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
         .contentShape(Rectangle())
@@ -377,6 +469,7 @@ struct ImportView: View {
 
     private func load(_ server: SyncServer) {
         lastServer = server
+        showServers = false     // 连上就把服务器卡片收起
         selected = []
         hint = nil
         ipFocused = false
