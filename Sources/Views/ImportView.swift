@@ -101,7 +101,7 @@ struct ImportView: View {
 
     /// 按模糊查找过滤后的可见歌曲（匹配度高的排前面）
     private var visibleSongs: [SongEntry] {
-        FuzzyMatch.filter(songs, name: { $0.key }, query)
+        FuzzyMatch.filter(songs, name: { $0.movieName.isEmpty ? $0.key : $0.key + " " + $0.movieName }, query)
     }
 
     /// 文件列表 -> 歌曲列表：mp3 与同名歌词合并成一行，再按当前方式排序
@@ -353,9 +353,12 @@ struct ImportView: View {
                         Text(String(s.year)).font(.footnote).foregroundStyle(.tertiary)
                     }
                     if s.movie {
-                        Text("影视")
+                        // 有剧名就显示剧名（服务器 movie-meta.json），没有就只显示「影视」
+                        Text(s.movieName.isEmpty ? "影视" : s.movieName)
                             .font(.caption)
                             .foregroundStyle(.orange)
+                            .lineLimit(1)
+                            .frame(maxWidth: 170)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.15), in: Capsule())

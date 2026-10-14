@@ -4,6 +4,8 @@ struct RemoteFile: Codable, Identifiable, Hashable {
     let name: String
     let size: Int
     let mtime: Int
+    /// 影视金曲的剧名（服务器 movie-meta.json 提供，普通歌没有这个字段）
+    let movie: String?
     var id: String { name }
 }
 

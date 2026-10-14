@@ -14,6 +14,7 @@ struct SongEntry: Identifiable, Hashable {
     let artist: String
     let title: String
     let movie: Bool          // 影视金曲
+    let movieName: String    // 影视金曲的剧名（服务器给的，可能为空）
     let artistPy: String     // 歌手拼音，用来按歌手排序
 
     var id: String { key }
@@ -28,11 +29,11 @@ enum SongSort: Int, CaseIterable {
 
     var label: String {
         switch self {
-        case .downloadedFirst: return "已下载优先"
-        case .undownloadedFirst: return "没下的优先"
-        case .year: return "按年份"
-        case .artist: return "按歌手"
-        case .movie: return "影视优先"
+        case .downloadedFirst: return "已下载"
+        case .undownloadedFirst: return "未下载"
+        case .year: return "年份"
+        case .artist: return "歌手"
+        case .movie: return "影视"
         }
     }
 }
@@ -84,7 +85,8 @@ enum SongGroup {
             out.append(SongEntry(key: key, audio: a, lyric: l, size: a.size,
                                  stale: isStale, downloaded: isLocal,
                                  year: p.year, artist: p.artist, title: p.title,
-                                 movie: p.movie, artistPy: FuzzyMatch.pinyinFull(p.artist)))
+                                 movie: p.movie, movieName: a.movie ?? "",
+                                 artistPy: FuzzyMatch.pinyinFull(p.artist)))
         }
         return out
     }

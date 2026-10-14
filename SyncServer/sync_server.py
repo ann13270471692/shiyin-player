@@ -24,8 +24,31 @@ if not os.path.isdir(ROOT):
     print("目录不存在:", ROOT)
     sys.exit(1)
 
+# 影视金曲的剧名表（可选）：放在本脚本旁边，manifest 里给对应 mp3 带上 "movie" 字段
+META_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "movie-meta.json")
+_movie_meta = {}
+_movie_meta_mtime = None
+
+
+def load_movie_meta():
+    global _movie_meta, _movie_meta_mtime
+    try:
+        mt = os.path.getmtime(META_PATH)
+    except OSError:
+        _movie_meta = {}
+        return
+    if mt == _movie_meta_mtime:
+        return
+    try:
+        with open(META_PATH, encoding="utf-8") as f:
+            _movie_meta = json.load(f)
+        _movie_meta_mtime = mt
+    except Exception:
+        _movie_meta = {}
+
 
 def build_manifest():
+    load_movie_meta()
     items = []
     for name in sorted(os.listdir(ROOT)):
         p = os.path.join(ROOT, name)
@@ -34,7 +57,11 @@ def build_manifest():
         if os.path.splitext(name)[1].lower() not in ALLOWED_EXT:
             continue
         st = os.stat(p)
-        items.append({"name": name, "size": st.st_size, "mtime": int(st.st_mtime)})
+        it = {"name": name, "size": st.st_size, "mtime": int(st.st_mtime)}
+        mv = _movie_meta.get(os.path.splitext(name)[0])
+        if mv:
+            it["movie"] = mv
+        items.append(it)
     return {"files": items}
 
 
