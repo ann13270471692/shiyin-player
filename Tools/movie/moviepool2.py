@@ -9,7 +9,7 @@ sys.path.insert(0, r'F:\Temp')
 import acquire
 import moviefill as M
 
-acquire._host_min['music.163.com'] = 3.0
+acquire._host_min['music.163.com'] = 6.0
 POPPOOL = r'F:\Temp\pools'
 MOVPOOL = r'F:\Temp\movie-pools'
 LIB = M.LIB

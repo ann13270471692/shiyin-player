@@ -92,10 +92,10 @@ def details(ids):
         u = ('https://music.163.com/api/song/detail?ids=['
              + ','.join(str(x) for x in ids[i:i + 80]) + ']')
         t = u''
-        for _try in range(4):
+        for _try in range(5):
             t = acquire.http(u, 'https://music.163.com/') or u''
             if u'操作频繁' in t or u'"code":405' in t:
-                time.sleep(40 + 30 * _try)          # 被限流就退避，别把结果当成“没有资料”
+                time.sleep(90 + 60 * _try)          # IP 级限流：退避要够长，别把限流当无资料
                 continue
             break
         try:

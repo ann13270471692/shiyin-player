@@ -53,6 +53,16 @@ def main():
             unver += 1
             continue
         drama, bad = M.gate({'id': cid}, det, year)
+        if not bad:                              # 本地歌词质量：配乐 cue 没几行有字
+            f0 = v.get('file') or ''
+            lp = os.path.splitext(f0 if f0.endswith('.mp3') else f0 + '.lrc')[0] + '.lrc'
+            try:
+                txt = open(os.path.join(LIB, lp), encoding='utf-8').read()
+            except Exception:
+                txt = u''
+            n = M.lrc_cjk_lines(txt)
+            if n < 5:
+                bad = u'歌词只有 %d 行有字，像配乐' % n
         if bad:
             drop.append((sp, k, v, bad))
         elif drama:
@@ -103,4 +113,5 @@ def main():
     print('清理后各年 ok:', ' '.join('%s:%d' % (y, c[y]) for y in sorted(c)))
 
 
-main()
+if __name__ == '__main__':
+    main()
