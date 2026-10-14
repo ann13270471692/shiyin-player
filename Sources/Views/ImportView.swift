@@ -433,7 +433,7 @@ struct ImportView: View {
             return
         }
         if selected.isEmpty {
-            hint = "先勾选歌曲：点「全选待更新」或「全选」"
+            hint = "先勾选歌曲：点一行选一首，或用「全选」"
             return
         }
         downloadSelected()
