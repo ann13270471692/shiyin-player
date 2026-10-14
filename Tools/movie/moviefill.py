@@ -134,6 +134,18 @@ def lrc_cjk_lines(s):
 LOCAL_GATE = False
 # 只用酷狗取词：网易云被限流时，回查网易歌词会白白卡住几十秒
 NO_NE_LYRIC = False
+# 以前下载失败过的候选（两台源都没音源）不再重试
+SKIP_FAILED = False
+# 候选热度下限（网易云 pop 0-100）：在线扩池捞进大量影视原声专辑里的纯音乐配乐，
+# 一首要白跑一次酷狗+网易云取词才被判掉，先用热度挡在门外。0=不卡。
+MIN_POP = 0.0
+# 配乐专业户（电影原声带里纯音乐配乐的作曲/演奏者）名单：这些人在日志里
+# 累计几千次「无歌词」，一首要白跑十几秒取词，直接在闸门离线拒掉。
+CUE_ARTISTS = set()
+# 时长下限（秒）：原声带里的配乐片段普遍很短，取词前离线判掉。0=不卡。
+MIN_DUR = 0.0
+# 跳过每年池子排序后的前 N 条：让多进程错开工作，不去抢同一批候选。
+SKIP_TOP = 0
 
 
 def gate(c, det, year):
@@ -151,8 +163,25 @@ def gate(c, det, year):
         return '', u'歌手是曲库/群星（%s）' % (d.get('artist') or u'')[:16]
     if JUNKNAME.search(nm):
         return '', u'标题像配乐/纯音乐（%s）' % nm[:18]
+    if CUE_ARTISTS and (d.get('artist') or u'').strip() in CUE_ARTISTS:
+        return '', u'配乐专业户（%s）' % (d.get('artist') or u'')[:16]
+    if MIN_DUR > 0:
+        dv = c.get('dur') or d.get('dur') or 0
+        try:
+            if dv and float(dv) < MIN_DUR:
+                return '', u'时长仅 %d 秒（配乐/片段）' % int(dv)
+        except (TypeError, ValueError):
+            pass
     if not cjk_ok(nm, d.get('artist') or u''):
         return '', u'日文/非华语（%s）' % (d.get('artist') or u'')[:16]
+    if MIN_POP > 0:
+        pv = c.get('pop', d.get('pop', None))
+        if pv is not None:
+            try:
+                if float(pv) < MIN_POP:
+                    return '', u'热度太低（pop=%s，多为配乐/冷门）' % pv
+            except (TypeError, ValueError):
+                pass
     m = BOOK.search(al) or BOOK.search(nm)
     if m:
         return m.group(1).strip(), ''
@@ -193,7 +222,15 @@ def load_state():
 def save_state(st):
     with acquire.lock:
         json.dump(st, open(STATE + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-    os.replace(STATE + '.tmp', STATE)
+    # Windows：别的进程（监控、或别的 fill 读 --also）可能正占着目标文件，重试几次
+    for _ in range(10):
+        try:
+            os.replace(STATE + '.tmp', STATE)
+            return True
+        except PermissionError:
+            time.sleep(0.5)
+    logline('状态文件被占用，这次没存上：%s' % STATE)
+    return False
 
 
 def pool_of(y):
@@ -245,15 +282,34 @@ def owned():
     return own
 
 
+def failed_names():
+    """以前试过但失败（多半是两台 meting 源都没音源）的候选歌名，
+    不再重复浪费酷狗/网易云/metings 请求。"""
+    out = set()
+    for f in [STATE] + list(ALSO):
+        try:
+            d = json.load(open(f, encoding='utf-8'))
+        except Exception:
+            continue
+        for v in d.values():
+            if v.get('state') == 'fail' and v.get('name'):
+                out.add(norm(v['name']))
+    return out
+
+
 def main(years, topup=False):
     st = load_state()
     tgt, ok, cap = plan(st, topup)
     rec = rec_by_year()
     own = owned()
+    failed = failed_names() if SKIP_FAILED else set()
+    print('跳过历史失败候选 %d 个歌名' % len(failed), flush=True)
     tmp = r'F:\Temp\dl-tmp-movie-%d.bin' % os.getpid()   # 每个进程自己的临时文件，避免并发互踩
     meta_new = {}
     for year in years:
         rows = pool_of(year)
+        if SKIP_TOP:
+            rows = rows[SKIP_TOP:]
         need = max(0, tgt[year] - ok[year] - rec.get(year, 0))
         print('%d: ok=%d rec=%d target=%d pool=%d need=%d'
               % (year, ok[year], rec.get(year, 0), tgt[year], len(rows), need), flush=True)
@@ -280,6 +336,8 @@ def main(years, topup=False):
             if got >= need:
                 break
             if norm(c['name']) in own:
+                continue
+            if norm(c['name']) in failed:
                 continue
             drama, bad = gate(c, det, year)      # 闸门：发行年 + 影视证据
             if bad:
@@ -351,6 +409,28 @@ if __name__ == '__main__':
     if '--no-ne-lyric' in args:
         globals()['NO_NE_LYRIC'] = True
         args = [a for a in args if a != '--no-ne-lyric']
+    if '--skip-failed' in args:
+        globals()['SKIP_FAILED'] = True
+        args = [a for a in args if a != '--skip-failed']
+    if '--min-pop' in args:
+        i = args.index('--min-pop')
+        globals()['MIN_POP'] = float(args[i + 1])
+        del args[i:i + 2]
+    if '--min-dur' in args:
+        i = args.index('--min-dur')
+        globals()['MIN_DUR'] = float(args[i + 1])
+        del args[i:i + 2]
+    if '--skip-top' in args:
+        i = args.index('--skip-top')
+        globals()['SKIP_TOP'] = int(args[i + 1])
+        del args[i:i + 2]
+    if '--cue-artists' in args:
+        i = args.index('--cue-artists')
+        try:
+            globals()['CUE_ARTISTS'] = set(json.load(open(args[i + 1], encoding='utf-8')))
+        except Exception as e:
+            print('读配乐名单失败：%s' % e, flush=True)
+        del args[i:i + 2]
     for flag, var in (('--state', 'STATE'), ('--log', 'LOG'), ('--meta', 'META_OUT')):
         if flag in args:
             i = args.index(flag)

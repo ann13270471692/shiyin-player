@@ -22,8 +22,8 @@ def load(p, d):
 def main():
     # 已下载的影视：state 文件里 ok 的条目
     have = {}
-    for st in ('movie-state.json', 'movie-state-a.json', 'movie-state-b.json',
-               'movie-state-c.json'):
+    for st in sorted(f for f in os.listdir(T)
+                     if f.startswith('movie-state') and f.endswith('.json')):
         for k, v in load(os.path.join(T, st), {}).items():
             if v.get('state') == 'ok':
                 y = k.split('-')[0]
