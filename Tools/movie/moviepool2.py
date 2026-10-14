@@ -9,7 +9,7 @@ sys.path.insert(0, r'F:\Temp')
 import acquire
 import moviefill as M
 
-acquire._host_min['music.163.com'] = 1.2
+acquire._host_min['music.163.com'] = 3.0
 POPPOOL = r'F:\Temp\pools'
 MOVPOOL = r'F:\Temp\movie-pools'
 LIB = M.LIB
@@ -63,6 +63,9 @@ def main():
         if not cand:
             continue
         det = M.details([r['id'] for r in cand])
+        if not det:
+            log('%d 资料全空（疑似被限流），本轮跳过' % y)
+            continue
         keep = []
         for r in cand:
             d = det.get(int(r['id']))
@@ -95,4 +98,5 @@ def main():
     log('合计新增 %d（年份区间 %d-%d）' % (grand, lo, hi))
 
 
-main()
+if __name__ == '__main__':
+    main()
