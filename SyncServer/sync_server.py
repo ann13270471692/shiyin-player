@@ -18,8 +18,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 
-ROOT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
-PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8450
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+# --movie-only：清单里只列影视金曲（文件名带【影视】，或在剧名表里），流行歌不进手机清单
+MOVIE_ONLY = any(a == "--movie-only" for a in sys.argv[1:])
+ROOT = os.path.abspath(_args[0] if len(_args) > 0 else ".")
+PORT = int(_args[1]) if len(_args) > 1 else 8450
 ALLOWED_EXT = {".mp3", ".m4a", ".aac", ".flac", ".wav", ".alac", ".lrc", ".txt", ".cue"}
 
 if not os.path.isdir(ROOT):
@@ -63,6 +66,8 @@ def build_manifest():
         mv = _movie_meta.get(os.path.splitext(name)[0])
         if mv:
             it["movie"] = mv
+        if MOVIE_ONLY and not (mv or u"【影视】" in name):
+            continue
         items.append(it)
     return {"files": items}
 

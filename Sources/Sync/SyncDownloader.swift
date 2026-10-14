@@ -91,6 +91,23 @@ final class SyncDownloader: ObservableObject {
     @Published private(set) var state: DownloadState = .idle
     @Published private(set) var activeFile: String?
     @Published private var cancelRequested = false
+    /// 在手机上被删过的歌（含它的歌词）：导入页标成「已删除」，不会被自动重下；
+    /// 手动重新下载成功后标记自动清掉。
+    @Published private(set) var deletedNames: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "deletedNames") ?? [])
+
+    func markDeleted(_ name: String) {
+        guard !name.isEmpty, !deletedNames.contains(name) else { return }
+        deletedNames.insert(name)
+        UserDefaults.standard.set(Array(deletedNames), forKey: "deletedNames")
+        DebugLog.shared.log("mark deleted \(name)")
+    }
+
+    func clearDeleted(_ name: String) {
+        guard deletedNames.remove(name) else { return }
+        UserDefaults.standard.set(Array(deletedNames), forKey: "deletedNames")
+        DebugLog.shared.log("unmark deleted \(name)")
+    }
 
     nonisolated private let box = TaskBox()
 
@@ -110,6 +127,10 @@ final class SyncDownloader: ObservableObject {
         speedText.removeValue(forKey: name)
         knownMtimes.removeValue(forKey: name)
         UserDefaults.standard.set(knownMtimes, forKey: "remoteMtimes")
+        // 删掉的就是手机副本：标成「已删除」，导入页一眼能看出来它为什么又变成没下了
+        markDeleted(name)
+        let lrc = (name as NSString).deletingPathExtension + ".lrc"
+        if remoteFiles.contains(where: { $0.name == lrc }) { markDeleted(lrc) }
     }
 
     func cancel() {
@@ -257,6 +278,7 @@ final class SyncDownloader: ObservableObject {
                 self.speedText[name] = nil
                 self.localNames.insert(name)
                 self.recordMtime(name, f.mtime)
+                self.clearDeleted(name)      // 重新下回来了，「已删除」标记自动消掉
             }
             return true
         }
@@ -326,6 +348,7 @@ final class SyncDownloader: ObservableObject {
                 self.speedText[name] = nil
                 self.localNames.insert(name)
                 self.recordMtime(name, f.mtime)
+                self.clearDeleted(name)      // 重新下回来了，「已删除」标记自动消掉
             }
             return true
         }

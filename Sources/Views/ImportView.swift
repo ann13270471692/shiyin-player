@@ -12,6 +12,10 @@ struct ImportView: View {
     // 连上以后把服务器卡片收起，位置留给歌曲列表；点「换电脑」再展开
     @State private var showServers: Bool = false
     @State private var dlCount: Int = 0
+    // 手机上删过的歌数量；shown = 当前渲染到第几行（分页，防看门狗杀进程）
+    @State private var delCount: Int = 0
+    @State private var shown: Int = 300
+    private let pageSize: Int = 300
     @State private var hint: String?
     @State private var lastServer: SyncServer?
     @State private var query: String = ""
@@ -43,14 +47,16 @@ struct ImportView: View {
                     } header: {
                         if !downloader.remoteFiles.isEmpty {
                             Text(query.isEmpty
-                                 ? "排序：\(sortMode.label)"
-                                 : "匹配 \(visibleSongs.count) / 共 \(songs.count) 首")
+                                 ? "排序：\(sortMode.label) · 显示前 \(visibleSongs.count) 行"
+                                 : "匹配 \(filteredSongs.count) / 共 \(songs.count) 首")
                         }
                     } footer: {
                         if downloader.remoteFiles.isEmpty {
                             Text("连上电脑后这里会列出全部歌曲。")
                         } else if visibleSongs.isEmpty {
                             Text("没有匹配「\(query)」的歌曲。可以只输入歌名的一部分，或试拼音首字母（如 qt = 晴天）。")
+                         } else if filteredSongs.count > visibleSongs.count {
+                             Button("加载更多（已显示 \(visibleSongs.count) / \(filteredSongs.count) 首）") { shown += pageSize }
                         }
                     }
 
@@ -68,6 +74,8 @@ struct ImportView: View {
                 .onChange(of: downloader.remoteFiles) { _ in rebuildSongs() }
                 .onChange(of: downloader.staleNames) { _ in rebuildSongs() }
                 .onChange(of: downloader.localNames) { _ in rebuildSongs() }
+                .onChange(of: downloader.deletedNames) { _ in rebuildSongs() }
+                .onChange(of: query) { _ in shown = pageSize }
 
                 // 底部固定操作条：拇指够得着，下载状态也在这里看
                 if !downloader.remoteFiles.isEmpty {
@@ -99,19 +107,27 @@ struct ImportView: View {
         return false
     }
 
-    /// 按模糊查找过滤后的可见歌曲（匹配度高的排前面）
-    private var visibleSongs: [SongEntry] {
+    /// 按模糊查找过滤后的全部歌曲（匹配度高的排前面）
+    private var filteredSongs: [SongEntry] {
         FuzzyMatch.filter(songs, name: { $0.movieName.isEmpty ? $0.key : $0.key + " " + $0.movieName }, query)
+    }
+
+    /// 一次只渲染一页：列表上万个行全建出来会被系统看门狗杀掉（1.0.7 的崩溃就是这个）
+    private var visibleSongs: [SongEntry] {
+        Array(filteredSongs.prefix(shown))
     }
 
     /// 文件列表 -> 歌曲列表：mp3 与同名歌词合并成一行，再按当前方式排序
     private func rebuildSongs() {
         var list = SongGroup.group(downloader.remoteFiles,
                                    local: downloader.localNames,
-                                   stale: downloader.staleNames)
+                                   stale: downloader.staleNames,
+                                   deleted: downloader.deletedNames)
         SongGroup.sort(&list, sortMode)
         songs = list
         dlCount = list.reduce(0) { $0 + ($1.downloaded ? 1 : 0) }
+        delCount = list.reduce(0) { $0 + ($1.deleted ? 1 : 0) }
+        shown = pageSize
     }
 
     private func setSort(_ mode: SongSort) {
@@ -260,7 +276,7 @@ struct ImportView: View {
     private var actionBar: some View {
         HStack(spacing: 8) {
             Text(query.isEmpty
-                 ? "共 \(songs.count) 首 · 已下载 \(dlCount) 首 · 已选 \(selected.count) 首"
+                 ? "共 \(songs.count) 首 · 已下载 \(dlCount) 首 · 已删除 \(delCount) 首 · 已选 \(selected.count) 首"
                  : "匹配 \(visibleSongs.count) / 共 \(songs.count) 首 · 已选 \(selected.count) 首")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -391,7 +407,9 @@ struct ImportView: View {
                 } else if s.downloaded {
                     Text("已下载").font(.footnote).foregroundStyle(.green)
                 } else {
-                    Text("未下载").font(.footnote).foregroundStyle(.tertiary)
+                    Text(s.deleted ? "已删除" : "未下载")
+                        .font(.footnote)
+                        .foregroundStyle(s.deleted ? Color.secondary : Color.tertiary)
                 }
                 Text(String(format: "%.1f MB", Double(s.size) / 1_048_576))
                     .font(.footnote)
@@ -424,7 +442,7 @@ struct ImportView: View {
     private func selectAll() {
         let list = visibleSongs
         for s in list { selected.insert(s.key) }
-        hint = "已选中 \(list.count) 首（歌词一并拉取），点「下载 \(list.count) 首」开始"
+        hint = "已选中当前页 \(list.count) 首（歌词一并拉取）；后面的歌点「加载更多」再选"
     }
 
     private func downloadOrStop() {
