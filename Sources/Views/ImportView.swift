@@ -5,6 +5,8 @@ struct ImportView: View {
     @EnvironmentObject var downloader: SyncDownloader
     @EnvironmentObject var library: LibraryStore
     @State private var selected: Set<String> = []
+    // 列表按「一首歌」一行显示：mp3 与歌词合并，选一次两个都拉
+    @State private var songs: [SongEntry] = []
     @State private var hint: String?
     @State private var lastServer: SyncServer?
     @State private var query: String = ""
@@ -26,23 +28,23 @@ struct ImportView: View {
 
                 Divider()
 
-                // 底部：文件列表（只有它是滚动视图，底部安全区留给标签栏）
+                // 底部：歌曲列表（只有它是滚动视图，底部安全区留给标签栏）
                 List {
                     Section {
-                        ForEach(visibleFiles) { f in
-                            row(f)
+                        ForEach(visibleSongs) { s in
+                            row(s)
                         }
                     } header: {
                         if !downloader.remoteFiles.isEmpty {
                             Text(query.isEmpty
-                                 ? "音乐集合（\(downloader.remoteFiles.count) 个文件）"
-                                 : "匹配 \(visibleFiles.count) / 共 \(downloader.remoteFiles.count) 个文件")
+                                 ? "音乐集合（\(songs.count) 首，每首含歌词）"
+                                 : "匹配 \(visibleSongs.count) / 共 \(songs.count) 首")
                         }
                     } footer: {
                         if downloader.remoteFiles.isEmpty {
-                            Text("连上电脑后这里会列出全部文件。")
-                        } else if visibleFiles.isEmpty {
-                            Text("没有匹配「\(query)」的文件。可以只输入歌名的一部分，或试拼音首字母（如 qt = 晴天）。")
+                            Text("连上电脑后这里会列出全部歌曲。")
+                        } else if visibleSongs.isEmpty {
+                            Text("没有匹配「\(query)」的歌曲。可以只输入歌名的一部分，或试拼音首字母（如 qt = 晴天）。")
                         }
                     }
 
@@ -56,6 +58,10 @@ struct ImportView: View {
                 }
                 .contentMargins(.bottom, 18, for: .scrollContent)
                 .scrollDismissesKeyboard(.immediately)
+                // 列表/本地状态/待更新状态任一变化，就重算「一行一首歌」
+                .onChange(of: downloader.remoteFiles) { _ in rebuildSongs() }
+                .onChange(of: downloader.staleNames) { _ in rebuildSongs() }
+                .onChange(of: downloader.localNames) { _ in rebuildSongs() }
             }
             .navigationTitle("导入")
             // 键盘上方一排「连接 / 完成」：键盘弹出时也能收起，
@@ -71,6 +77,7 @@ struct ImportView: View {
             .onAppear {
                 browser.start()
                 downloader.rescanLocal()
+                rebuildSongs()
             }
             .onDisappear { browser.stop() }
         }
@@ -81,9 +88,16 @@ struct ImportView: View {
         return false
     }
 
-    /// 按模糊查找过滤后的可见列表（匹配度高的排前面）
-    private var visibleFiles: [RemoteFile] {
-        FuzzyMatch.filter(downloader.remoteFiles, name: { $0.name }, query)
+    /// 按模糊查找过滤后的可见歌曲（匹配度高的排前面）
+    private var visibleSongs: [SongEntry] {
+        FuzzyMatch.filter(songs, name: { $0.key }, query)
+    }
+
+    /// 文件列表 -> 歌曲列表：mp3 与同名歌词合并成一行
+    private func rebuildSongs() {
+        songs = SongGroup.group(downloader.remoteFiles,
+                                local: downloader.localNames,
+                                stale: downloader.staleNames)
     }
 
     // MARK: - 模糊查找
@@ -186,7 +200,7 @@ struct ImportView: View {
                     hint = nil
                 }
                 Spacer(minLength: 4)
-                Text("已选 \(selected.count)")
+                Text("已选 \(selected.count) 首")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -204,7 +218,7 @@ struct ImportView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     } else {
-                        Text("先勾选要拉取的文件，再点右边下载")
+                        Text("点一行就选一首：mp3 和歌词一起下载，没歌词的自动跳过")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -213,7 +227,7 @@ struct ImportView: View {
                 Button {
                     downloadOrStop()
                 } label: {
-                    Text(downloader.state == .running ? "停止下载" : "下载所选（\(selected.count)）")
+                    Text(downloader.state == .running ? "停止下载" : "下载所选（\(selected.count) 首）")
                         .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 4)
                 }
@@ -240,17 +254,15 @@ struct ImportView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - 文件行
+    // MARK: - 歌曲行（一行 = 一首歌：mp3 与它的歌词一起下载）
 
-    private func row(_ f: RemoteFile) -> some View {
-        let stale = downloader.staleNames.contains(f.name)
-        let downloaded = downloader.localNames.contains(f.name)
-        let on = selected.contains(f.name)
+    private func row(_ s: SongEntry) -> some View {
+        let on = selected.contains(s.key)
         return HStack(spacing: 10) {
-            // 勾选框只反映"选没选"，和下载状态分开，已下载的文件也能重新拉取
+            // 勾选框只反映"选没选"，和下载状态分开，已下载的歌也能重新拉取
             Button {
-                if on { selected.remove(f.name) }
-                else { selected.insert(f.name) }
+                if on { selected.remove(s.key) }
+                else { selected.insert(s.key) }
             } label: {
                 Image(systemName: on ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(on ? Color.orange : Color.secondary)
@@ -261,8 +273,8 @@ struct ImportView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(f.name).font(.caption).lineLimit(1)
-                if let p = downloader.progress[f.name] {
+                Text(s.key).font(.caption).lineLimit(1)
+                if let p = songProgress(s) {
                     if p < 0 {
                         Text("下载失败，已自动重试仍未成功——再点一次「下载所选」可续传")
                             .font(.caption2).foregroundStyle(.red)
@@ -274,50 +286,63 @@ struct ImportView: View {
                             Text(String(format: "%.0f%%", p * 100))
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
-                        if let s = downloader.speedText[f.name] {
-                            Text(s).font(.caption2).foregroundStyle(.secondary)
+                        if let sp = songSpeed(s) {
+                            Text(sp).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             Spacer()
-            if stale {
+            if s.stale {
                 Text("需更新").font(.caption2).foregroundStyle(.orange)
-            } else if downloaded {
+            } else if s.downloaded {
                 Text("已下载").font(.caption2).foregroundStyle(.green)
             } else {
-                Text(String(format: "%.1f MB", Double(f.size) / 1_048_576))
+                Text(String(format: "%.1f MB", Double(s.size) / 1_048_576))
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if on { selected.remove(f.name) }
-            else { selected.insert(f.name) }
+            if on { selected.remove(s.key) }
+            else { selected.insert(s.key) }
         }
+    }
+
+    /// 进度优先看音频；音频下完（或没有音频进度）时看歌词
+    private func songProgress(_ s: SongEntry) -> Double? {
+        if let a = s.audio, let p = downloader.progress[a.name], p < 0 || p < 1 { return p }
+        if let l = s.lyric, let p = downloader.progress[l.name] { return p }
+        if let a = s.audio, let p = downloader.progress[a.name] { return p }
+        return nil
+    }
+
+    private func songSpeed(_ s: SongEntry) -> String? {
+        if let a = s.audio, let t = downloader.speedText[a.name] { return t }
+        if let l = s.lyric { return downloader.speedText[l.name] }
+        return nil
     }
 
     // MARK: - 动作
 
     private func selectStale() {
         downloader.rescanLocal()
+        rebuildSongs()
         var n = 0
-        // 有搜索词时只作用于匹配到的文件：搜一个词→全选待更新→下载
-        for f in visibleFiles
-        where !downloader.localNames.contains(f.name)
-            || downloader.staleNames.contains(f.name) {
-            selected.insert(f.name)
+        // 有搜索词时只作用于匹配到的歌：搜一个词→全选待更新→下载
+        for s in visibleSongs where !s.downloaded || s.stale {
+            selected.insert(s.key)
             n += 1
         }
         hint = n == 0
-            ? "没有检测到需要更新的文件。想强制刷新歌词：点「全选」再下载"
-            : "已选中 \(n) 个未下载或电脑上改过的文件"
+            ? "没有检测到需要更新的歌。想强制重新拉取：点「全选」再下载"
+            : "已选中 \(n) 首未下载或电脑上改过的歌"
     }
 
     private func selectAll() {
-        let files = visibleFiles
-        for f in files { selected.insert(f.name) }
-        hint = "已全选 \(files.count) 个文件，点「下载所选」重新拉取"
+        let list = visibleSongs
+        for s in list { selected.insert(s.key) }
+        hint = "已全选 \(list.count) 首（歌词一并拉取），点「下载所选」重新下载"
     }
 
     private func downloadOrStop() {
@@ -331,7 +356,7 @@ struct ImportView: View {
             return
         }
         if selected.isEmpty {
-            hint = "先勾选文件：点「全选待更新」或「全选」"
+            hint = "先勾选歌曲：点「全选待更新」或「全选」"
             return
         }
         downloadSelected()
@@ -360,7 +385,16 @@ struct ImportView: View {
 
     private func downloadSelected() {
         guard let server = lastServer else { return }
-        let files = downloader.remoteFiles.filter { selected.contains($0.name) }
+        // 选中一首 = 音频 + 它的歌词；电脑上没歌词就只有音频，不另外提示
+        var files: [RemoteFile] = []
+        for s in songs where selected.contains(s.key) {
+            if let a = s.audio { files.append(a) }
+            if let l = s.lyric { files.append(l) }
+        }
+        if files.isEmpty {
+            hint = "选中的歌曲没有可下载的内容"
+            return
+        }
         Task {
             await downloader.download(files, from: server)
             library.refresh()
