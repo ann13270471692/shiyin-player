@@ -409,7 +409,7 @@ struct ImportView: View {
                 } else {
                     Text(s.deleted ? "已删除" : "未下载")
                         .font(.footnote)
-                        .foregroundStyle(s.deleted ? Color.secondary : Color.tertiary)
+                        .foregroundStyle(s.deleted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
                 }
                 Text(String(format: "%.1f MB", Double(s.size) / 1_048_576))
                     .font(.footnote)

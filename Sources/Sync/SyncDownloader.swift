@@ -104,7 +104,7 @@ final class SyncDownloader: ObservableObject {
     }
 
     func clearDeleted(_ name: String) {
-        guard deletedNames.remove(name) else { return }
+        guard deletedNames.remove(name) != nil else { return }
         UserDefaults.standard.set(Array(deletedNames), forKey: "deletedNames")
         DebugLog.shared.log("unmark deleted \(name)")
     }
