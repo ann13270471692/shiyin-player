@@ -41,6 +41,23 @@ enum SongSort: Int, CaseIterable {
     }
 }
 
+/// 只看某一类：全部 / 影视金曲 / 手机上删过的 / 还没下的
+enum SongFilter: Int, CaseIterable {
+    case all
+    case movie
+    case deleted
+    case undownloaded
+
+    var label: String {
+        switch self {
+        case .all: return "全部"
+        case .movie: return "只看影视"
+        case .deleted: return "只看已删除"
+        case .undownloaded: return "只看未下载"
+        }
+    }
+}
+
 enum SongGroup {
     private struct Parsed {
         var year = 0

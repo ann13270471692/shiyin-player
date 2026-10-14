@@ -9,6 +9,8 @@ struct ImportView: View {
     @State private var songs: [SongEntry] = []
     // 排序：默认已下载优先，可切 没下的优先 / 年份 / 歌手 / 影视
     @State private var sortMode: SongSort = .downloadedFirst
+    // 只看某一类：全部 / 只看影视 / 只看已删除 / 只看未下载
+    @State private var filterMode: SongFilter = .all
     // 连上以后把服务器卡片收起，位置留给歌曲列表；点「换电脑」再展开
     @State private var showServers: Bool = false
     @State private var dlCount: Int = 0
@@ -33,6 +35,7 @@ struct ImportView: View {
                 if !downloader.remoteFiles.isEmpty {
                     searchBar
                     sortBar
+                    filterBar
                     actionBar
                 }
 
@@ -109,7 +112,14 @@ struct ImportView: View {
 
     /// 按模糊查找过滤后的全部歌曲（匹配度高的排前面）
     private var filteredSongs: [SongEntry] {
-        FuzzyMatch.filter(songs, name: { $0.movieName.isEmpty ? $0.key : $0.key + " " + $0.movieName }, query)
+        let base: [SongEntry]
+        switch filterMode {
+        case .all: base = songs
+        case .movie: base = songs.filter { $0.movie }
+        case .deleted: base = songs.filter { $0.deleted }
+        case .undownloaded: base = songs.filter { !$0.downloaded }
+        }
+        return FuzzyMatch.filter(base, name: { $0.movieName.isEmpty ? $0.key : $0.key + " " + $0.movieName }, query)
     }
 
     /// 一次只渲染一页：列表上万个行全建出来会被系统看门狗杀掉（1.0.7 的崩溃就是这个）
@@ -264,6 +274,34 @@ struct ImportView: View {
                                         in: Capsule())
                             .overlay(Capsule().strokeBorder(
                                 sortMode == m ? Color.orange : Color(.systemGray4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Text("只看").font(.footnote).foregroundStyle(.tertiary)
+                ForEach(SongFilter.allCases, id: \.self) { f in
+                    Button {
+                        filterMode = f
+                        shown = pageSize
+                        selected = []
+                    } label: {
+                        Text(f.label)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(filterMode == f ? Color.white : Color.primary)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 7)
+                            .background(filterMode == f ? Color.blue : Color(.secondarySystemBackground),
+                                        in: Capsule())
+                            .overlay(Capsule().strokeBorder(
+                                filterMode == f ? Color.blue : Color(.systemGray4), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
