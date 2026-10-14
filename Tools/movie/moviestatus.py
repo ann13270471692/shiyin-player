@@ -29,6 +29,10 @@ def main():
                 y = k.split('-')[0]
                 if y.isdigit():
                     have[int(y)] = have.get(int(y), 0) + 1
+    # 酷狗直补的影视（kg-state.json 的键是歌名，年份在 value 里）
+    for k, v in load(os.path.join(T, 'kg-state.json'), {}).items():
+        if v.get('state') == 'ok' and isinstance(v.get('year'), int):
+            have[v['year']] = have.get(v['year'], 0) + 1
     # 从流行库里认出来的影视（不下载、不改名，只算配额）
     cred = {}
     for k, v in load(os.path.join(T, 'pop-movie.json'), {}).items():

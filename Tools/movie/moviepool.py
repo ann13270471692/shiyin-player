@@ -11,7 +11,7 @@ from acquire import http, norm
 import fill6                                    # 复用 cjk_ok / BADVER / norm 判定
 from fill6 import cjk_ok, BADVER
 
-acquire._host_min['music.163.com'] = 1.1         # 与 fill6 并发，温和限速
+acquire._host_min['music.163.com'] = 12.0        # 与下载进程并发，温和限速
 
 OUT = r'F:\Temp\movie-pools'
 RAW = r'F:\Temp\movie-raw.json'
