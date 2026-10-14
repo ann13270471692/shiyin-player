@@ -117,6 +117,9 @@ final class SyncDownloader: ObservableObject {
         box.cancelCurrent()
     }
 
+    private var lastEtag: String?
+    private var lastManifest: [RemoteFile]?
+
     func fetchManifest(from server: SyncServer) async {
         state = .running
         defer { if case .running = state { state = .idle } }
@@ -125,18 +128,40 @@ final class SyncDownloader: ObservableObject {
         cfg.waitsForConnectivity = false
         let session = URLSession(configuration: cfg)
         defer { session.invalidateAndCancel() }
-        guard let url = URL(string: "http://\(server.host):\(server.port)/manifest.json"),
-              let (data, _) = try? await session.data(from: url),
-              let m = try? JSONDecoder().decode(Manifest.self, from: data)
-        else {
-            DebugLog.shared.log("manifest FAIL \(server.host):\(server.port)")
-            state = .failed("无法读取文件列表：检查服务器是否在运行、IP 是否正确")
+        let t0 = CFAbsoluteTimeGetCurrent()
+        guard let url = URL(string: "http://\(server.host):\(server.port)/manifest.json") else {
+            DebugLog.shared.log("manifest BAD URL \(server.host):\(server.port)")
+            state = .failed("服务器地址格式不对")
             return
         }
-        DebugLog.shared.log("manifest ok \(m.files.count) files")
-        remoteFiles = m.files
-        rescanLocal()
-        markStale(m.files)
+        var req = URLRequest(url: url)
+        if let e = lastEtag { req.setValue(e, forHTTPHeaderField: "If-None-Match") }
+        do {
+            let (data, response) = try await session.data(for: req)
+            let http = response as? HTTPURLResponse
+            let ms = Int((CFAbsoluteTimeGetCurrent() - t0) * 1000)
+            if http?.statusCode == 304, let old = lastManifest {
+                DebugLog.shared.log("manifest 304 未变 (\(ms) ms)")
+                remoteFiles = old
+                rescanLocal()
+                markStale(old)
+                return
+            }
+            guard let m = try? JSONDecoder().decode(Manifest.self, from: data) else {
+                DebugLog.shared.log("manifest BAD JSON \(data.count) bytes")
+                state = .failed("文件列表读不懂：服务器返回的内容不对")
+                return
+            }
+            lastManifest = m.files
+            if let etag = http?.value(forHTTPHeaderField: "ETag") { lastEtag = etag }
+            DebugLog.shared.log("manifest ok \(m.files.count) files in \(ms) ms")
+            remoteFiles = m.files
+            rescanLocal()
+            markStale(m.files)
+        } catch {
+            DebugLog.shared.log("manifest FAIL \(server.host):\(server.port): \(error)")
+            state = .failed("无法读取文件列表：检查服务器是否在运行、IP 是否正确")
+        }
     }
 
     func markStale(_ files: [RemoteFile]) {

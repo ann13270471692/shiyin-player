@@ -8,11 +8,13 @@
 依赖(可选但强烈建议，用于手机自动发现):
     pip install zeroconf
 """
+import hashlib
 import json
 import os
 import re
 import socket
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 
@@ -65,6 +67,23 @@ def build_manifest():
     return {"files": items}
 
 
+# 列表缓存：曲库现在 2 万多条、每次现建要 0.4-0.7 秒，手机刷新频繁时这里先扛住。
+MAN_TTL = 5.0
+_man_cache = {"t": 0.0, "body": b"", "etag": "", "built": 0}
+
+
+def manifest_body():
+    now = time.time()
+    if now - _man_cache["t"] >= MAN_TTL:
+        body = json.dumps(build_manifest(), ensure_ascii=False).encode("utf-8")
+        _man_cache["body"] = body
+        _man_cache["etag"] = '"%s-%d"' % (hashlib.md5(body).hexdigest()[:16], len(body))
+        _man_cache["t"] = now
+        _man_cache["built"] += 1
+        return _man_cache["body"], _man_cache["etag"], True
+    return _man_cache["body"], _man_cache["etag"], False
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # 安静模式
         pass
@@ -72,8 +91,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = unquote(self.path.split("?")[0])
         if path == "/manifest.json":
-            body = json.dumps(build_manifest(), ensure_ascii=False).encode("utf-8")
+            t0 = time.time()
+            body, etag, built = manifest_body()
+            ua = (self.headers.get("User-Agent") or "?")[:40]
+            if self.headers.get("If-None-Match") == etag:
+                print("读取列表: %s 304 未变 (UA=%s)" % (self.client_address[0], ua),
+                      flush=True)
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.end_headers()
+                return
+            print("读取列表: %s -> %d 个文件, %s, %.0f ms, UA=%s"
+                  % (self.client_address[0], body.count(b'"name"'),
+                     "新建" if built else "缓存", (time.time() - t0) * 1000, ua), flush=True)
             self.send_response(200)
+            self.send_header("ETag", etag)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -105,6 +137,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(416)
                 return
             self.send_response(206 if partial else 200)
+            print("取文件: %s %s %s%s" % (self.client_address[0],
+                                          "206" if partial else "200", name,
+                                          "" if start is None else " from %d" % start),
+                  flush=True)
             if partial:
                 self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.send_header("Accept-Ranges", "bytes")
