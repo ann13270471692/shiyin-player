@@ -130,6 +130,12 @@ def lrc_cjk_lines(s):
     return n
 
 
+# 离线闸门：候选池里已存了权威资料（pub/alias/album），网易云限流时不再回查
+LOCAL_GATE = False
+# 只用酷狗取词：网易云被限流时，回查网易歌词会白白卡住几十秒
+NO_NE_LYRIC = False
+
+
 def gate(c, det, year):
     """用候选 id 自己的资料把关：发行年 + 影视证据。返回 (剧名, 失败原因)。"""
     d = det.get(int(c['id']))
@@ -145,6 +151,8 @@ def gate(c, det, year):
         return '', u'歌手是曲库/群星（%s）' % (d.get('artist') or u'')[:16]
     if JUNKNAME.search(nm):
         return '', u'标题像配乐/纯音乐（%s）' % nm[:18]
+    if not cjk_ok(nm, d.get('artist') or u''):
+        return '', u'日文/非华语（%s）' % (d.get('artist') or u'')[:16]
     m = BOOK.search(al) or BOOK.search(nm)
     if m:
         return m.group(1).strip(), ''
@@ -251,7 +259,12 @@ def main(years, topup=False):
               % (year, ok[year], rec.get(year, 0), tgt[year], len(rows), need), flush=True)
         if need <= 0 or not rows:
             continue
-        det = details([c['id'] for c in rows])   # 闸门用：候选 id 的权威资料
+        if LOCAL_GATE:
+            # 限流期间用池子里已有的资料把关；seed 行的年份是占位的，本轮不碰
+            det = {int(c['id']): c for c in rows
+                   if not str(c.get('src', u'')).startswith('seed')}
+        else:
+            det = details([c['id'] for c in rows])   # 闸门用：候选 id 的权威资料
         idxs = [int(k.split('-')[1]) for k in st
                 if k[:4] == str(year) and len(k.split('-')) > 1 and k.split('-')[1].isdigit()]
         for f in ALSO:                       # 并行时也要接着其他 state 里同一年已用的序号
@@ -274,7 +287,12 @@ def main(years, topup=False):
                         % (year, c['name'][:22], c['artist'][:14], bad[:70]))
                 continue
             # 先取歌词：影视金曲要求有词（顺带挡掉 OST 专辑里的纯音乐配乐），也省一次下载
-            lrc = lyric_netease(c['id']) or lyric_kugou(c['name'], c['artist'], c.get('dur', 0))
+            if LOCAL_GATE:
+                lrc = lyric_kugou(c['name'], c['artist'], c.get('dur', 0))
+                if not lrc and not NO_NE_LYRIC:
+                    lrc = lyric_netease(c['id'])
+            else:
+                lrc = lyric_netease(c['id']) or lyric_kugou(c['name'], c['artist'], c.get('dur', 0))
             if not lrc:
                 logline('%d SKIP   %-22s %-14s 无歌词（纯音乐/无词，跳过）'
                         % (year, c['name'][:22], c['artist'][:14]))
@@ -327,6 +345,12 @@ if __name__ == '__main__':
     args = [x for x in sys.argv[1:]]
     topup = '--topup' in args
     args = [a for a in args if a != '--topup']
+    if '--local-gate' in args:
+        globals()['LOCAL_GATE'] = True
+        args = [a for a in args if a != '--local-gate']
+    if '--no-ne-lyric' in args:
+        globals()['NO_NE_LYRIC'] = True
+        args = [a for a in args if a != '--no-ne-lyric']
     for flag, var in (('--state', 'STATE'), ('--log', 'LOG'), ('--meta', 'META_OUT')):
         if flag in args:
             i = args.index(flag)
