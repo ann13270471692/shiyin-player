@@ -84,6 +84,28 @@ def main(write):
                 done.add(sid)
                 break
 
+    stems = set(os.path.splitext(h[1])[0] for h in hits)
+    # 第二路：pool5 在库里搜到同名歌（当时没下载），按剧名+年份+歌手把库里那首认成影视
+    hf = os.path.join(T, 'pool5-libhits.json')
+    if os.path.exists(hf):
+        for e in json.load(open(hf, encoding='utf-8')).values():
+            nn = norm(e.get('name') or u'')
+            ey = int(e.get('year') or 0)
+            if not nn or not ey:
+                continue
+            for (fy, far, fname) in lib.get(nn, ()):
+                stem = os.path.splitext(fname)[0]
+                if stem in meta or stem in stems:
+                    continue
+                if abs(fy - ey) > 6:
+                    continue
+                if not (arts(e.get('artist')) & arts(far)):
+                    continue
+                stems.add(stem)
+                hits.append((fy, fname, e['name'], e.get('artist') or u'',
+                             e.get('drama') or u'', 0))
+                break
+
     print(u'可以认库 %d 首（不下载）' % len(hits))
     per = {}
     for fy, fname, nm, ar, drama, sid in hits:

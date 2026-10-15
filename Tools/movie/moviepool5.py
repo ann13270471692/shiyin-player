@@ -23,6 +23,7 @@ import moviepool as MP
 M = importlib.import_module('moviefill')
 POOL = r'F:\Temp\movie-pools'
 REC = r'F:\Temp\pop-movie.json'
+LIBHIT = r'F:\Temp\pool5-libhits.json'
 LIB = r'F:\DeepSeek Workspace\时事分析\音乐集合'
 acquire._host_min['music.163.com'] = 6.0
 COVER = re.compile(u'精选|best|重唱|翻唱|致敬|纪念|合集|系列|翻自|新唱| remake', re.I)
@@ -64,6 +65,16 @@ def search(q, limit=30):
     return ((j.get('result') or {}).get('songs')) or []
 
 
+def album_tracks(aid):
+    """整张专辑的曲目：确认过主题曲所在的 OST 专辑，整张都算这部剧的歌。"""
+    j = MP.jget(u'https://music.163.com/api/album/%s' % aid) or {}
+    return (j.get('album') or {}).get('songs') or []
+
+
+MAX_EXP = 2          # 每部剧最多展开几张专辑
+MAX_TR = 40          # 每张专辑最多取几首
+
+
 def main(y0, y1, write):
     dy = {n: y for n, y in kgfill.drama_years().items() if y0 <= y <= y1}
     print(u'目标年份 %d-%d，剧名 %d 个' % (y0, y1, len(dy)), flush=True)
@@ -100,11 +111,56 @@ def main(y0, y1, write):
 
     add = {y: 0 for y in M.YEARS}
     added_names = set()
+    libhit = {}
     skip = {'dup': 0, 'lib': 0, 'done': 0, 'junk': 0, 'year': 0,
             'weak': 0, 'cover': 0, 'era': 0}
     for drama, dy0 in sorted(dy.items(), key=lambda kv: kv[1]):
         tn = M.norm(drama)
         got = 0
+        seen_al, exp = set(), 0
+
+        def expand(s):
+            """展开这张确认过的原声专辑：整张都算这部剧的歌（证据=同张 OST）。
+            库里已有同名歌也要展开——80 年代的主题曲多半已经在流行库里。"""
+            nonlocal exp, got
+            ab0 = ((s.get('album') or {}).get('name') or u'').strip()
+            aid = int(((s.get('album') or {}).get('id') or 0) or 0)
+            if not aid or aid in seen_al or exp >= MAX_EXP or COVER.search(ab0 or u''):
+                return
+            seen_al.add(aid)
+            exp += 1
+            alpub = year_of((s.get('album') or {}).get('publishTime'))
+            for t in album_tracks(aid)[:MAX_TR]:
+                tid = int(t.get('id') or 0)
+                if not tid or tid in have_ids or tid in done_ids:
+                    continue
+                tnm = (t.get('name') or u'').strip()
+                tar = u'/'.join((a.get('name') or u'') for a in (t.get('artists') or []))
+                tab = ((t.get('album') or {}).get('name') or ab0 or u'').strip()
+                tr = {'name': tnm, 'artist': tar, 'album': tab,
+                      'dur': int((t.get('duration') or 0) / 1000)}
+                if not song_ok(tr):
+                    continue
+                tn2 = M.norm(tnm)
+                if tn2 in own or tn2 in added_names:
+                    libhit.setdefault(tn2, {'name': tnm, 'artist': tar, 'album': tab,
+                                            'drama': drama, 'year': dy0, 'dur': tr['dur']})
+                    continue
+                y2 = dy0
+                if alpub and abs(alpub - dy0) <= 6:
+                    y2 = alpub
+                if not (1980 <= y2 <= 2026) or y2 not in add:
+                    continue
+                row2 = dict(tr)
+                row2.update({'id': tid, 'pub': y2,
+                             'alias': u' '.join(t.get('alias') or []),
+                             'drama': drama,
+                             'src': u'da%s' % M.norm(drama)[:12], 'pop': 0})
+                pools[y2].append(row2)
+                have_ids.add(tid)
+                added_names.add(tn2)
+                add[y2] += 1
+                got += 1
         for q in (u'《%s》' % drama, u'%s 主题曲' % drama):
             for s in search(q):
                 sid = int(s.get('id') or 0)
@@ -124,6 +180,18 @@ def main(y0, y1, write):
                     continue
                 if nn in own or nn in added_names:
                     skip['lib'] += 1
+                    # 库里已经有同名歌：不下载，但记进「库里命中」清单，
+                    # 让 moviemark 把流行库里那首认成影视金曲（配额算账，不重复下载）。
+                    ay0 = year_of((s.get('album') or {}).get('publishTime'))
+                    cand = {'name': nm, 'artist': ar, 'album': ab,
+                            'dur': int((s.get('duration') or 0) / 1000)}
+                    if (kgfill.era_ok(ar, dy0)
+                            and not (ay0 and ay0 - dy0 > 8 and COVER.search(ab or u''))
+                            and song_ok(cand)):
+                        libhit[nn] = {'name': nm, 'artist': ar, 'album': ab,
+                                      'drama': drama, 'year': dy0,
+                                      'dur': cand['dur']}
+                        expand(s)     # 主题曲已在库里，照样展开它那张原声专辑
                     continue
                 if not kgfill.era_ok(ar, dy0):
                     skip['era'] += 1    # 歌手活跃年代跟这部剧对不上（现代翻唱/同名歌）
@@ -151,6 +219,7 @@ def main(y0, y1, write):
                 add[y] += 1
                 got += 1
                 print(u'  %d +%s - %s 《%s》' % (y, ar[:12], nm[:20], drama[:16]), flush=True)
+                expand(s)
             if got >= 8:
                 break
     print(u'跳过：已在池 %d / 已下过 %d / 库里同名 %d / 剧名没命中 %d / 年代不合 %d / 现代翻唱 %d / 年份不合 %d / 像配乐纯音乐 %d'
@@ -163,6 +232,16 @@ def main(y0, y1, write):
     if not write:
         print(u'（dry run，加 --write 才写盘）', flush=True)
         return
+    old = {}
+    if os.path.exists(LIBHIT):
+        try:
+            old = json.load(open(LIBHIT, encoding='utf-8'))
+        except Exception:
+            old = {}
+    old.update(libhit)
+    json.dump(old, open(LIBHIT + '.tmp', 'w', encoding='utf-8'), ensure_ascii=False)
+    os.replace(LIBHIT + '.tmp', LIBHIT)
+    print(u'库里命中清单共 %d 条（本次 %d）-> %s' % (len(old), len(libhit), LIBHIT), flush=True)
     for y in M.YEARS:
         if not add[y]:
             continue

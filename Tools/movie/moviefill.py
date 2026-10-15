@@ -144,6 +144,11 @@ MIN_POP = 0.0
 # 配乐专业户（电影原声带里纯音乐配乐的作曲/演奏者）名单：这些人在日志里
 # 累计几千次「无歌词」，一首要白跑十几秒取词，直接在闸门离线拒掉。
 CUE_ARTISTS = set()
+# 跑内学习：同一歌手两次取不到歌词，就当成配乐专业户，后面的候选离线拒掉，
+# 不再白跑取词。学到的名单写进 CUE_LEARN，下次跑直接加载。
+NO_LRC = set()
+LRC_MISS = {}
+CUE_LEARN = r'F:\Temp\cue-learned.json'
 # 时长下限（秒）：原声带里的配乐片段普遍很短，取词前离线判掉。0=不卡。
 MIN_DUR = 0.0
 # 跳过每年池子排序后的前 N 条：让多进程错开工作，不去抢同一批候选。
@@ -169,6 +174,8 @@ def gate(c, det, year):
         return '', u'标题像配乐/纯音乐（%s）' % nm[:18]
     if CUE_ARTISTS and (d.get('artist') or u'').strip() in CUE_ARTISTS:
         return '', u'配乐专业户（%s）' % (d.get('artist') or u'')[:16]
+    if (d.get('artist') or u'').strip() in NO_LRC:
+        return '', u'同歌手已两次无歌词，判为配乐（%s）' % (d.get('artist') or u'')[:16]
     if MIN_DUR > 0:
         dv = c.get('dur') or d.get('dur') or 0
         try:
@@ -188,8 +195,9 @@ def gate(c, det, year):
                 pass
     m = BOOK.search(al) or BOOK.search(nm)
     dn = (d.get('drama') or u'').strip()
-    if dn and (norm(dn) in norm(nm) or norm(dn) in norm(al) or norm(dn) in norm(ab)):
-        # 按剧名搜出来的候选（src=ds…）：证据 = 剧名落在歌名/别名/专辑里
+    if dn and (norm(dn) in norm(nm) or norm(dn) in norm(al) or norm(dn) in norm(ab)
+               or str(c.get('src') or u'').startswith(u'da')):
+        # 按剧名搜出来的候选（src=ds…）或同张原声专辑展开的（src=da…）
         return dn, ''
     if m:
         return m.group(1).strip(), ''
@@ -359,13 +367,21 @@ def main(years, topup=False):
                     lrc = lyric_netease(c['id'])
             else:
                 lrc = lyric_netease(c['id']) or lyric_kugou(c['name'], c['artist'], c.get('dur', 0))
-            if not lrc:
-                logline('%d SKIP   %-22s %-14s 无歌词（纯音乐/无词，跳过）'
-                        % (year, c['name'][:22], c['artist'][:14]))
-                continue
-            if lrc_cjk_lines(lrc) < 5:
-                logline('%d SKIP   %-22s %-14s 歌词只有 %d 行有字，像配乐'
-                        % (year, c['name'][:22], c['artist'][:14], lrc_cjk_lines(lrc)))
+            if not lrc or lrc_cjk_lines(lrc) < 5:
+                a = (c.get('artist') or u'').strip()
+                why = (u'无歌词（纯音乐/无词，跳过）' if not lrc
+                       else u'歌词只有 %d 行有字，像配乐' % lrc_cjk_lines(lrc))
+                if a:
+                    LRC_MISS[a] = LRC_MISS.get(a, 0) + 1
+                    if LRC_MISS[a] >= 2 and a not in NO_LRC:
+                        NO_LRC.add(a)
+                        try:
+                            json.dump(sorted(NO_LRC), open(CUE_LEARN + '.tmp', 'w',
+                                                           encoding='utf-8'), ensure_ascii=False)
+                            os.replace(CUE_LEARN + '.tmp', CUE_LEARN)
+                        except Exception:
+                            pass
+                logline('%d SKIP   %-22s %-14s %s' % (year, c['name'][:22], c['artist'][:14], why))
                 continue
             used += 1
             k = '%d-%03d' % (year, used)
@@ -447,6 +463,12 @@ if __name__ == '__main__':
         except Exception as e:
             print('读配乐名单失败：%s' % e, flush=True)
         del args[i:i + 2]
+    if os.path.exists(CUE_LEARN):
+        try:
+            globals()['NO_LRC'] = set(json.load(open(CUE_LEARN, encoding='utf-8')))
+            print('载入已学到的配乐歌手 %d 个' % len(NO_LRC), flush=True)
+        except Exception:
+            pass
     for flag, var in (('--state', 'STATE'), ('--log', 'LOG'), ('--meta', 'META_OUT')):
         if flag in args:
             i = args.index(flag)
