@@ -29,10 +29,12 @@ STATE = os.path.join(T, 'kg-state.json')
 META = os.path.join(T, 'movie-meta-kg.json')
 LOGF = os.path.join(T, 'movie.log')
 TAG = u'【影视】'
-acquire._host_min['mobiles.kugou.com'] = 0.6
-acquire._host_min['trackercdn.kugou.com'] = 0.6
+acquire._host_min['mobiles.kugou.com'] = 2.5
+acquire._host_min['trackercdn.kugou.com'] = 1.0
 
-JUNK = re.compile(u'纯音乐|伴奏|翻唱|cover|dj|remix|版|现场|live|片段|花絮', re.I)
+JUNK = re.compile(u'纯音乐|伴奏|翻唱|cover|dj|remix|版|现场|live|片段|花絮'
+                  u'|第[一二三四五六七八九十百千零\\d]+(集|回|章|部|讲)'
+                  u'|部分|有声|评书|广播剧|说书', re.I)
 BOOK = re.compile(u'《(.{1,40}?)》')
 MIN_DUR = 110
 MIN_LRC = 5
@@ -70,6 +72,15 @@ def drama_years():
                 cur = out.get(nm)
                 if cur is None or y < cur:
                     out[nm] = y
+    # 人工种子表：网易云侧 1980-1994 的影视证据几乎为零（只有个位数条目），
+    # 只能靠人工剧名清单去酷狗搜主题曲。已有出处的剧名不覆盖。
+    try:
+        seed = json.load(open(os.path.join(T, 'drama-seed.json'), encoding='utf-8'))
+        for nm, y in seed.items():
+            if isinstance(y, int) and 1980 <= y <= 2026 and out.get(nm) is None:
+                out[nm] = y
+    except Exception:
+        pass
     return out
 
 
@@ -77,7 +88,7 @@ def kg_get(h, want_dur):
     """按酷狗 hash 直接下载（免费曲目 status=1；VIP 曲目 status=2 直接跳过）。"""
     h = h.lower()
     key = hashlib.md5((h + 'kgcloudv2').encode()).hexdigest()
-    j = http(u'http://trackercdn.kugou.com/i/v2/?key=%s&hash=%s&appid=1005&pid=2'
+    j = http(u'http://trackercdn.kugou.com/i/v2/?key=%s&hash=%s&appid=1014&pid=6'
              u'&cmd=25&bitrate=320&behavior=download' % (key, h), u'http://www.kugou.com/')
     try:
         d = json.loads(j)
@@ -165,6 +176,15 @@ def next_slot(year, used):
     return mx
 
 
+def kg_try(kw, n=20):
+    """酷狗搜索偶尔整批返回空（限流），重试一次。"""
+    rows = kg_search(kw, n=n)
+    if not rows:
+        time.sleep(4.0)
+        rows = kg_search(kw, n=n)
+    return rows
+
+
 def main(years, write=False):
     dy = drama_years()
     sel = sorted([(y, n) for n, y in dy.items() if y in years])
@@ -186,7 +206,7 @@ def main(years, write=False):
     for y, drama in sel:
         tried = 0
         for kw in (u'《%s》 主题曲' % drama, u'%s 插曲' % drama):
-            rows = kg_search(kw, n=20)
+            rows = kg_try(kw, n=20)
             for r in rows:
                 nm = (r.get('songname') or u'').strip()
                 ar = (r.get('singername') or u'').strip()
@@ -287,7 +307,7 @@ if __name__ == '__main__':
             st = json.load(open(STATE, encoding='utf-8'))
             keep = {k: v for k, v in st.items()
                     if v.get('state') == 'ok' or v.get('why') not in
-                    (u'no-year-tag', u'year-out')}
+                    (u'no-year-tag', u'year-out', u'kg status=2')}
             if len(keep) != len(st):
                 json.dump(keep, open(STATE, 'w', encoding='utf-8'), ensure_ascii=False)
                 print(u'重试：清掉 %d 条年份相关的失败记录' % (len(st) - len(keep)), flush=True)

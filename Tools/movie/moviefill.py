@@ -11,13 +11,15 @@ import json, os, re, sys, time
 sys.path.insert(0, r'F:\Temp')
 import acquire
 from acquire import (LIB, norm, probe, ingest, lyric_netease, lyric_kugou,
-                     clean_lrc, safe)
+                     clean_lrc, safe, get_kugou)
 import fill6
 from fill6 import cjk_ok, BADVER, ne_dl
 
 acquire._host_min['music.163.com'] = 1.2          # 与流行池并发，双方都温和
 acquire._host_min['api.qijieya.cn'] = 3.0
 acquire._host_min['api.injahow.cn'] = 3.0
+acquire._host_min['mobiles.kugou.com'] = 2.0      # 酷狗搜索会被限流，慢一点
+acquire._host_min['trackercdn.kugou.com'] = 1.0
 
 POOL = r'F:\Temp\movie-pools'
 STATE = r'F:\Temp\movie-state.json'
@@ -146,6 +148,8 @@ CUE_ARTISTS = set()
 MIN_DUR = 0.0
 # 跳过每年池子排序后的前 N 条：让多进程错开工作，不去抢同一批候选。
 SKIP_TOP = 0
+# 两台 meting 都没音源时，退到酷狗下载（约一半 MISS 属于这种）
+KG_FALLBACK = False
 
 
 def gate(c, det, year):
@@ -183,6 +187,10 @@ def gate(c, det, year):
             except (TypeError, ValueError):
                 pass
     m = BOOK.search(al) or BOOK.search(nm)
+    dn = (d.get('drama') or u'').strip()
+    if dn and (norm(dn) in norm(nm) or norm(dn) in norm(al) or norm(dn) in norm(ab)):
+        # 按剧名搜出来的候选（src=ds…）：证据 = 剧名落在歌名/别名/专辑里
+        return dn, ''
     if m:
         return m.group(1).strip(), ''
     mo = OST.search(al) or OST.search(ab)
@@ -362,6 +370,11 @@ def main(years, topup=False):
             used += 1
             k = '%d-%03d' % (year, used)
             src, why = ne_dl(c['id'], c.get('dur', 0), tmp)
+            via = 'mt'
+            if not src and KG_FALLBACK:
+                # 网易云两台 meting 都没音源时，退到酷狗（只取它有的最高码率，不做升样）
+                src, why = get_kugou(c['name'], c['artist'], c.get('dur', 0))
+                via = 'kg'
             if not src:
                 st[k] = {'state': 'fail', 'why': why[:120], 'name': c['name'], 'artist': c['artist']}
                 logline('%s MISS %-22s %-14s %s' % (k, c['name'][:22], c['artist'][:14], why[:110]))
@@ -381,7 +394,7 @@ def main(years, topup=False):
             own.add(norm(c['name']))
             open(os.path.join(LIB, nb + '.lrc'), 'w', encoding='utf-8').write(
                 clean_lrc(lrc, c['artist'], c['name']))
-            st[k] = {'state': 'ok', 'src': 'mt', 'file': nb, 'why': why[:90],
+            st[k] = {'state': 'ok', 'src': via, 'file': nb, 'why': why[:90],
                      'id': c['id'], 'drama': drama}
             meta_new[nb] = drama
             logline('%s OK   %-22s %-14s %s' % (k, c['name'][:22], c['artist'][:14], why[:110]))
@@ -424,6 +437,9 @@ if __name__ == '__main__':
         i = args.index('--skip-top')
         globals()['SKIP_TOP'] = int(args[i + 1])
         del args[i:i + 2]
+    if '--kg' in args:
+        globals()['KG_FALLBACK'] = True
+        args = [a for a in args if a != '--kg']
     if '--cue-artists' in args:
         i = args.index('--cue-artists')
         try:
