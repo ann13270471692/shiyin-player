@@ -30,11 +30,17 @@ OSTKW = re.compile(u'主题曲|片尾曲|片头曲|插曲|原声|OST|电视|电�
 http = acquire.http
 
 
+NONCJK = re.compile(u'[\uac00-\ud7af\u1100-\u11ff'
+                    u'\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]')
+
+
 def song_ok(r):
     """自己把关：华语、不是配乐/纯音乐、不是曲库群星、时长够。
     影视证据 = 剧名命中歌名/别名（或专辑里带原声字样），不靠专辑名猜。"""
     if not M.cjk_ok(r['name'], r['artist']):
         return False
+    if NONCJK.search(r['name'] or u'') or NONCJK.search(r['artist'] or u''):
+        return False        # 韩文/泰文/俄文等，不是华语
     if M.JUNKART.search(r['artist'] or u'') or M.JUNKNAME.search(r['name'] or u''):
         return False
     if (r['dur'] or 0) < 100:

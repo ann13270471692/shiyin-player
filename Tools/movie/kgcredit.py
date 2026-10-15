@@ -91,6 +91,9 @@ def evidence(al, inside, dy, year):
             if hit is None or abs(hit - year) > 4:
                 continue
             nm = re.sub(u'[（(\\[【].{0,24}[)）\\]】]$', u'', cand).strip()
+            # 「西游记 电视剧原声带」这种写成专辑名的，剧名只留「西游记」
+            nm = re.sub(u'\s*(电视剧|电视原声带?|电影原声带?|原声大碟|原声带|原声|主题曲|插曲|片尾曲|片头曲|ost|专辑)\s*$',
+                        u'', nm, flags=re.I).strip()
             return nm if len(nm) >= 2 else cand
     return u''
 
@@ -130,7 +133,8 @@ def main(y0, y1, write):
             if seen % 50 == 0:
                 print(u'  %d 查过 / %d 命中' % (seen, hit), flush=True)
             continue
-        rec[stem] = drama
+        rec[stem] = {'id': 0, 'year': y, 'name': nm, 'artist': ar,
+                     'drama': drama, 'how': 'kg'}
         meta[stem] = drama
         hit += 1
         logline(u'%d KGCREDIT %-24s %-14s -> 《%s》 [%s]' % (y, nm[:24], ar[:14], drama, al[:20]))
